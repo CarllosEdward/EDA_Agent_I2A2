@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+*.log
+__pycache__
+.pytest_cache
+.vscode
+temp_files/
+*.csv
+agents_backup/
+tasks_backup/
+tools_backup/
+utils_backup/
+streamlit_app.py.backup
+main.py.backup
+.DS_Store
+Thumbs.db
