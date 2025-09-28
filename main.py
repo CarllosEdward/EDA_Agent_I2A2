@@ -5,18 +5,22 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from utils.config import Config
 from agents import create_coordenador_agent, create_data_explorer_agent, create_visualization_expert_agent
+from agents.coordenador import CoordenadorInteligente  # ADICIONADO: Coordenador evoluído
+from agents.visualization_expert import VisualizationExpert  # ADICIONADO: Wrapper de visualização
 from tasks import create_data_loading_task, create_analysis_task, create_visualization_task, create_conclusion_task
+from tasks.visualization_task import create_titanic_survival_task, create_correlation_analysis_task  # ADICIONADO
 from utils.helpers import ensure_directories
 from datetime import datetime
+import streamlit as st  # ADICIONADO: Para feedback visual
 
 class EDACrewSystem:
-    """Sistema principal de análise EDA com CrewAI - Versão Final Sincronizada"""
+    """Sistema principal de análise EDA com CrewAI - Versão Final com Visualizações Integradas"""
     
     def __init__(self, llm_provider: str = "openai", model_name: str = None, max_tokens: int = 1500):
         """
-        Inicializa o sistema EDA
+        Inicializa o sistema EDA (mantido + visualizações)
         Args:
-            llm_provider: 'groq' ou 'openai' - PADRÃO MUDADO PARA OPENAI
+            llm_provider: 'groq' ou 'openai' - PADRÃO MANTIDO PARA OPENAI
             model_name: nome específico do modelo
             max_tokens: limite de tokens para respostas
         """
@@ -28,7 +32,7 @@ class EDACrewSystem:
         self.max_tokens = max_tokens
         self.llm = self._setup_llm(llm_provider, self.model_name, max_tokens)
         
-        # Contexto do dataset atual
+        # Contexto do dataset atual (mantido)
         self.current_dataset = None
         self.dataset_info = {
             'name': '',
@@ -42,21 +46,25 @@ class EDACrewSystem:
         
         print(f"✅ Sistema configurado: {self.llm_provider} - {self.model_name}")
         
-        # Inicializa agentes
+        # Inicializa agentes (mantido)
         self.coordenador = create_coordenador_agent(self.llm)
         self.data_explorer = create_data_explorer_agent(self.llm)
         self.visualization_expert = create_visualization_expert_agent(self.llm)
+        
+        # NOVO: Inicializar componentes evoluídos
+        self.coordenador_inteligente = CoordenadorInteligente(self.llm)
+        self.visualization_expert_direct = VisualizationExpert(self.llm)
     
     def _get_default_model(self, provider: str) -> str:
-        """Retorna modelo padrão para o provider - MODELOS ATUALIZADOS"""
+        """Retorna modelo padrão para o provider (mantido)"""
         defaults = {
-            "groq": "llama-3.1-8b-instant",  # MODELO VÁLIDO ATUALIZADO
-            "openai": "gpt-3.5-turbo"
+            "groq": "llama-3.1-8b-instant",  # MANTIDO
+            "openai": "gpt-3.5-turbo"        # MANTIDO
         }
-        return defaults.get(provider.lower(), "gpt-3.5-turbo")  # OpenAI como fallback
+        return defaults.get(provider.lower(), "gpt-3.5-turbo")
     
     def _setup_llm(self, provider: str, model_name: str, max_tokens: int):
-        """Configura o modelo LLM com controle de tokens e prefixos corretos"""
+        """Configura o modelo LLM (mantido)"""
         print(f"🔧 Configurando LLM: {provider} - {model_name} (tokens: {max_tokens})")
         
         if provider.lower() == "groq":
@@ -64,7 +72,7 @@ class EDACrewSystem:
             if not api_key:
                 raise ValueError("GROQ_API_KEY não configurada")
             
-            # CORREÇÃO: Verificar se modelo precisa de prefixo automático
+            # MANTIDO: Verificar se modelo precisa de prefixo automático
             if not any(model_name.startswith(prefix) for prefix in ["groq/", "openai/", "qwen/", "moonshotai/"]):
                 groq_model = f"groq/{model_name}"
             else:
@@ -72,7 +80,7 @@ class EDACrewSystem:
                 
             print(f"🔧 Modelo Groq configurado: {groq_model}")
             
-            # CORREÇÃO: Limites de tokens mais conservadores para Groq
+            # MANTIDO: Limites de tokens mais conservadores para Groq
             safe_max_tokens = min(max_tokens, 500)  # Forçar limite baixo para evitar rate limit
             if safe_max_tokens != max_tokens:
                 print(f"⚠️ Tokens reduzidos para Groq: {max_tokens} → {safe_max_tokens}")
@@ -82,8 +90,8 @@ class EDACrewSystem:
                 model=groq_model,  # Usar modelo com prefixo correto
                 temperature=0.1,
                 max_tokens=safe_max_tokens,  # Usar limite seguro
-                timeout=30,        # REDUZIDO: de 60 para 30
-                max_retries=1,     # REDUZIDO: de 2 para 1  
+                timeout=30,        # MANTIDO: de 60 para 30
+                max_retries=1,     # MANTIDO: de 2 para 1  
                 streaming=False
             )
         
@@ -107,22 +115,23 @@ class EDACrewSystem:
             raise ValueError("Provider deve ser 'groq' ou 'openai'")
     
     def load_dataset(self, csv_source: str) -> str:
-        """Carrega dataset CSV com contexto completo"""
+        """Carrega dataset CSV com contexto completo (mantido + melhorado)"""
         try:
             print(f"📄 Carregando: {csv_source} com {self.llm_provider}-{self.model_name}")
             
-            # NOVO: Verificação preventiva para Groq
+            # MANTIDO: Verificação preventiva para Groq
             if self.llm_provider == "groq" and self.max_tokens > 400:
                 print("⚠️ Groq com tokens altos - reduzindo para evitar rate limit")
                 old_tokens = self.max_tokens
                 self.max_tokens = min(self.max_tokens, 400)
                 # Reconfigurar LLM com limite menor
                 self.llm = self._setup_llm(self.llm_provider, self.model_name, self.max_tokens)
-                # Recriar agentes
-                self.data_explorer = create_data_explorer_agent(self.llm)
+                # NOVO: Recriar também componentes evoluídos
+                self.coordenador_inteligente = CoordenadorInteligente(self.llm)
+                self.visualization_expert_direct = VisualizationExpert(self.llm)
                 print(f"🔧 Tokens otimizados: {old_tokens} → {self.max_tokens}")
             
-            # Primeiro, carregar dataset internamente para obter contexto
+            # MANTIDO: Carregar dataset internamente
             try:
                 if csv_source.startswith(('http://', 'https://')):
                     from utils.helpers import download_csv_from_url
@@ -132,7 +141,7 @@ class EDACrewSystem:
                 else:
                     self.current_dataset = pd.read_csv(csv_source)
                 
-                # Extrair nome do arquivo de forma robusta
+                # MANTIDO: Extrair nome do arquivo
                 if csv_source.startswith(('http://', 'https://')):
                     dataset_name = csv_source.split('/')[-1]
                     if '?' in dataset_name:
@@ -140,12 +149,11 @@ class EDACrewSystem:
                 else:
                     dataset_name = os.path.basename(csv_source)
                 
-                # Garantir que tem extensão
                 if not dataset_name.endswith('.csv'):
                     if '.' not in dataset_name:
                         dataset_name += '.csv'
                 
-                # Atualizar informações completas do dataset
+                # MANTIDO: Atualizar informações completas do dataset
                 self.dataset_info = {
                     'name': dataset_name,
                     'source': csv_source,
@@ -162,7 +170,7 @@ class EDACrewSystem:
                 
             except Exception as e:
                 print(f"⚠️ Erro ao carregar internamente: {e}")
-                # Continuar mesmo sem carregar internamente
+                # MANTIDO: Continuar mesmo sem carregar internamente
                 dataset_name = os.path.basename(csv_source) if not csv_source.startswith('http') else csv_source.split('/')[-1]
                 self.dataset_info = {
                     'name': dataset_name,
@@ -174,7 +182,7 @@ class EDACrewSystem:
                     'sample_data': []
                 }
             
-            # Criar contexto detalhado para o agente
+            # MANTIDO: Criar contexto detalhado para o agente
             dataset_context = f"""
             CONTEXTO DO DATASET CARREGADO:
             Nome do arquivo: {self.dataset_info['name']}
@@ -190,9 +198,8 @@ class EDACrewSystem:
             Execute sua análise exploratória inicial do dataset.
             """
             
-            # Crew para carregamento com contexto
+            # MANTIDO: Crew para carregamento
             task_with_context = create_data_loading_task(self.data_explorer, csv_source)
-            # Modificar descrição da tarefa para incluir contexto
             task_with_context.description = dataset_context + "\n\n" + task_with_context.description
             
             crew = Crew(
@@ -210,24 +217,60 @@ class EDACrewSystem:
             error_msg = str(e)
             print(f"❌ Erro no carregamento: {e}")
             
-            # NOVO: Tratamento específico de rate limit
+            # MANTIDO: Tratamento específico de rate limit
             if "rate_limit" in error_msg.lower() or "RateLimitError" in error_msg:
                 return f"⏳ Rate Limit Atingido! Reduza tokens na sidebar (atual: {self.max_tokens}) ou mude para OpenAI. Detalhes do erro: {error_msg}"
             else:
                 return f"Erro ao carregar dataset: {str(e)}"
     
-    def analyze_question(self, question: str) -> str:
-        """Analisa pergunta sobre os dados COM CONTEXTO do dataset"""
+    # NOVA FUNÇÃO: Análise com detecção inteligente de visualização
+    def analyze_question_smart(self, question: str) -> str:
+        """
+        Analisa pergunta com detecção inteligente de visualizações
+        """
         try:
-            print(f"🔍 Analisando pergunta: {question[:50]}...")
+            print(f"🔍 Análise inteligente: {question[:50]}...")
             
             # NOVO: Verificação preventiva de rate limit
             if self.llm_provider == "groq":
                 if self.max_tokens > 400:
                     print("⚠️ Tokens altos para Groq - reduzindo automaticamente")
-                    self.update_max_tokens(300)  # Reduzir automaticamente
+                    self.update_max_tokens(300)
             
-            # CORREÇÃO: Resposta direta para perguntas sobre o arquivo
+            # Usar coordenador inteligente
+            if hasattr(self, 'coordenador_inteligente') and self.current_dataset is not None:
+                response = self.coordenador_inteligente.coordinate_response(
+                    question, 
+                    self.current_dataset,
+                    self.data_explorer,
+                    self.visualization_expert_direct
+                )
+                return response
+            else:
+                # Fallback para método original
+                return self.analyze_question(question)
+                
+        except Exception as e:
+            print(f"❌ Erro na análise inteligente: {e}")
+            error_msg = str(e)
+            
+            if "rate_limit" in error_msg.lower() or "RateLimitError" in error_msg:
+                return f"⏳ Rate limit! Atual: {self.max_tokens} tokens. Reduza na sidebar ou use OpenAI."
+            else:
+                return f"Erro na análise: {str(e)}"
+    
+    def analyze_question(self, question: str) -> str:
+        """Analisa pergunta sobre os dados COM CONTEXTO do dataset (mantido como fallback)"""
+        try:
+            print(f"🔍 Analisando pergunta: {question[:50]}...")
+            
+            # MANTIDO: Verificação preventiva de rate limit
+            if self.llm_provider == "groq":
+                if self.max_tokens > 400:
+                    print("⚠️ Tokens altos para Groq - reduzindo automaticamente")
+                    self.update_max_tokens(300)
+            
+            # MANTIDO: Resposta direta para perguntas sobre o arquivo
             question_lower = question.lower()
             if any(keyword in question_lower for keyword in 
                    ['qual arquivo', 'que arquivo', 'arquivo csv', 'qual dataset', 
@@ -253,7 +296,7 @@ class EDACrewSystem:
                 
                 return direct_answer
             
-            # Para outras perguntas, criar contexto completo
+            # MANTIDO: Para outras perguntas, criar contexto completo
             dataset_context = f"""
             CONTEXTO ATUAL - DATASET JÁ CARREGADO:
             Arquivo: {self.dataset_info['name']}
@@ -272,17 +315,24 @@ class EDACrewSystem:
             Responda baseado nos dados já carregados do arquivo '{self.dataset_info['name']}'.
             """
             
-            # Determinar se precisa visualização
+            # NOVO: Detectar necessidade de visualização
             needs_viz = any(word in question_lower for word in 
-                          ['gráfico', 'gráfico', 'plot', 'chart', 'visualiz', 'histograma', 
-                           'correlação', 'correlacao', 'scatter', 'boxplot', 'heatmap'])
+                          ['gráfico', 'grafico', 'plot', 'chart', 'visualiz', 'histograma', 
+                           'correlação', 'correlacao', 'scatter', 'boxplot', 'heatmap', 'sobreviv'])
             
             if needs_viz:
                 agents = [self.data_explorer, self.visualization_expert]
                 
-                # Tasks com contexto
+                # NOVO: Tasks específicas para visualização
                 analysis_task = create_analysis_task(self.data_explorer, dataset_context)
-                viz_task = create_visualization_task(self.visualization_expert, question, str(self.dataset_info))
+                
+                # Escolher task de visualização baseada na pergunta
+                if 'sobreviv' in question_lower and ('gênero' in question_lower or 'sexo' in question_lower):
+                    viz_task = create_titanic_survival_task(self.visualization_expert, question, str(self.dataset_info))
+                elif 'correlação' in question_lower or 'correlacao' in question_lower:
+                    viz_task = create_correlation_analysis_task(self.visualization_expert, str(self.dataset_info))
+                else:
+                    viz_task = create_visualization_task(self.visualization_expert, question, str(self.dataset_info))
                 
                 tasks = [analysis_task, viz_task]
             else:
@@ -304,22 +354,22 @@ class EDACrewSystem:
             print(f"❌ Erro na análise: {e}")
             error_msg = str(e)
             
-            # NOVO: Tratamento de rate limit
+            # MANTIDO: Tratamento de rate limit
             if "rate_limit" in error_msg.lower() or "RateLimitError" in error_msg:
                 return f"⏳ Rate Limit! Atual: {self.max_tokens} tokens. Reduza na sidebar ou use OpenAI."
             else:
                 return f"Erro na análise: {str(e)}"
     
     def get_conclusions(self) -> str:
-        """Gera conclusões consolidadas COM CONTEXTO do dataset"""
+        """Gera conclusões consolidadas COM CONTEXTO do dataset (mantido)"""
         try:
             print(f"📋 Gerando conclusões para: {self.dataset_info['name']}")
             
-            # NOVO: Verificação preventiva para Groq
+            # MANTIDO: Verificação preventiva para Groq
             if self.llm_provider == "groq" and self.max_tokens > 350:
-                self.update_max_tokens(300)  # Reduzir para conclusões
+                self.update_max_tokens(300)
             
-            # Contexto completo para conclusões
+            # MANTIDO: Contexto completo para conclusões
             conclusion_context = f"""
             GERAR CONCLUSÕES CONSOLIDADAS PARA:
             Arquivo: {self.dataset_info['name']}
@@ -353,31 +403,35 @@ class EDACrewSystem:
             print(f"❌ Erro conclusões: {e}")
             error_msg = str(e)
             
-            # NOVO: Tratamento de rate limit para conclusões
+            # MANTIDO: Tratamento de rate limit
             if "rate_limit" in error_msg.lower() or "RateLimitError" in error_msg:
                 return f"⏳ Rate limit nas conclusões! Tokens atuais: {self.max_tokens}. Reduza para ~200 ou use OpenAI."
             else:
                 return f"Erro ao gerar conclusões: {str(e)}"
     
     def get_dataset_context(self) -> dict:
-        """Retorna contexto atual do dataset"""
+        """Retorna contexto atual do dataset (mantido)"""
         return self.dataset_info.copy()
     
     def update_max_tokens(self, new_max_tokens: int):
-        """Atualiza limite de tokens do modelo"""
+        """Atualiza limite de tokens do modelo (mantido + componentes novos)"""
         if new_max_tokens != self.max_tokens:
             print(f"🔧 Atualizando max_tokens: {self.max_tokens} -> {new_max_tokens}")
             self.max_tokens = new_max_tokens
             # Reconfigurar LLM com novo limite
             self.llm = self._setup_llm(self.llm_provider, self.model_name, new_max_tokens)
             
-            # Recriar agentes com novo LLM
+            # MANTIDO: Recriar agentes originais
             self.coordenador = create_coordenador_agent(self.llm)
             self.data_explorer = create_data_explorer_agent(self.llm)
             self.visualization_expert = create_visualization_expert_agent(self.llm)
+            
+            # NOVO: Recriar componentes evoluídos
+            self.coordenador_inteligente = CoordenadorInteligente(self.llm)
+            self.visualization_expert_direct = VisualizationExpert(self.llm)
     
     def get_system_status(self) -> dict:
-        """Retorna status completo do sistema"""
+        """Retorna status completo do sistema (mantido)"""
         return {
             'provider': self.llm_provider,
             'model': self.model_name,
@@ -386,9 +440,9 @@ class EDACrewSystem:
             'dataset_info': self.dataset_info
         }
     
-    # NOVAS FUNÇÕES: Rate limit management
+    # MANTIDAS: Funções de rate limit management
     def check_rate_limit_safety(self) -> tuple:
-        """Verifica se configuração é segura para evitar rate limits"""
+        """Verifica se configuração é segura para evitar rate limits (mantido)"""
         if self.llm_provider == "groq":
             if self.max_tokens > 500:
                 return False, f"Tokens muito altos ({self.max_tokens}) para Groq. Recomendado: ≤400"
@@ -400,7 +454,7 @@ class EDACrewSystem:
             return True, f"OpenAI - sem limitações severas ({self.max_tokens} tokens)"
     
     def auto_optimize_for_groq(self):
-        """Otimiza automaticamente configuração para Groq"""
+        """Otimiza automaticamente configuração para Groq (mantido)"""
         if self.llm_provider == "groq" and self.max_tokens > 400:
             old_tokens = self.max_tokens
             new_tokens = 300
@@ -408,3 +462,15 @@ class EDACrewSystem:
             print(f"🔧 Auto-otimização Groq: {old_tokens} → {new_tokens} tokens")
             return f"⚡ Otimizado: {old_tokens} → {new_tokens} tokens para evitar rate limit"
         return None
+    
+    # NOVA FUNÇÃO: Método principal recomendado
+    def process_user_question(self, question: str) -> str:
+        """
+        Método principal recomendado para processar perguntas do usuário
+        """
+        # Tentar usar análise inteligente primeiro
+        if hasattr(self, 'analyze_question_smart'):
+            return self.analyze_question_smart(question)
+        else:
+            # Fallback para método original
+            return self.analyze_question(question)

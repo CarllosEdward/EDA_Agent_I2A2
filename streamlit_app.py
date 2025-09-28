@@ -3,9 +3,11 @@ import pandas as pd
 import os
 import tempfile
 import json
+import numpy as np
 from datetime import datetime
 from PIL import Image
 import plotly.express as px
+import plotly.graph_objects as go
 from utils.config import Config
 from utils.helpers import ensure_directories, clean_temp_files, validate_csv_file
 from main import EDACrewSystem
@@ -68,6 +70,12 @@ st.markdown("""
         width: 100%;
         margin: 0.25rem 0;
     }
+    .copy-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -91,162 +99,184 @@ def initialize_session_state():
         st.session_state.session_finalized = False
 
 def handle_rate_limit_error(error_msg: str, provider: str):
-    """Função para tratar rate limits de forma inteligente"""
+    """Função para tratar rate limits"""
     if "rate limit" in error_msg.lower() or "rate_limit_exceeded" in error_msg:
-        st.error("⏳ **Rate Limit Atingido!** Reduza tokens na sidebar ou mude para OpenAI.")
+        st.error("Rate Limit Atingido! Reduza tokens na sidebar ou mude para OpenAI.")
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🔄 Reduzir Tokens", key="reduce_tokens"):
+            if st.button("Reduzir Tokens", key="reduce_tokens"):
                 if provider == "groq":
                     st.session_state.tokens_slider = 200
                     st.rerun()
         with col2:
-            if st.button("🚀 Mudar OpenAI", key="switch_openai"):
+            if st.button("Mudar OpenAI", key="switch_openai"):
                 st.session_state.llm_provider_select = "openai"
                 st.rerun()
         
         return True
     return False
 
+
+# Sidebar geral para qualquer dataset
+def add_visualization_sidebar():
+    """Sidebar com opções gerais de visualização - VERSÃO CORRIGIDA"""
+    if st.session_state.get('dataset_loaded') and st.session_state.get('eda_system'):
+        
+        eda_system = st.session_state.eda_system
+        
+        if hasattr(eda_system, 'current_dataset') and eda_system.current_dataset is not None:
+            data = eda_system.current_dataset
+            
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("### 📊 Visualizações Rápidas")
+            
+            # Botão principal para gerar todas as visualizações
+            if st.sidebar.button("🎯 Gerar Todas as Visualizações", key="viz_all_sidebar"):
+                # Simular input do usuário para processar visualizações
+                question = "visualizações completas do dataset"
+                
+                # Processar sem rerun automático
+                process_user_question(question)
+                
+                # Mostrar mensagem de sucesso
+                st.sidebar.success("✅ Visualizações geradas!")
+            
+            # Botões para gráficos específicos
+            st.sidebar.markdown("**Gráficos Específicos:**")
+            
+            if st.sidebar.button("📈 Matriz Correlação", key="viz_corr"):
+                process_user_question("gera matriz de correlação")
+                st.sidebar.success("✅ Matriz gerada!")
+            
+            if st.sidebar.button("📊 Distribuições", key="viz_dist"):
+                process_user_question("mostra distribuições das variáveis")
+                st.sidebar.success("✅ Distribuições geradas!")
+            
+            if st.sidebar.button("🎯 Scatter Plots", key="viz_scatter"):
+                process_user_question("cria scatter plots entre variáveis")
+                st.sidebar.success("✅ Scatter plots gerados!")
+            
+            # Informações do dataset
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("### 📋 Info do Dataset")
+            
+            # Métricas básicas
+            col1, col2 = st.sidebar.columns(2)
+            with col1:
+                st.metric("Linhas", data.shape[0])
+            with col2:
+                st.metric("Colunas", data.shape[1])
+            
+            # Tipos de colunas
+            numeric_cols = data.select_dtypes(include=['number']).columns
+            categorical_cols = data.select_dtypes(include=['object']).columns
+            
+            st.sidebar.markdown(f"**Numéricas:** {len(numeric_cols)}")
+            st.sidebar.markdown(f"**Categóricas:** {len(categorical_cols)}")
+            
+            # Mostrar nomes das colunas principais
+            st.sidebar.markdown("**Principais Colunas:**")
+            
+            if len(data.columns) <= 8:
+                for col in data.columns:
+                    # Encurtar nomes longos
+                    col_display = col if len(col) <= 20 else col[:17] + "..."
+                    st.sidebar.markdown(f"• {col_display}")
+            else:
+                for col in data.columns[:6]:
+                    col_display = col if len(col) <= 20 else col[:17] + "..."
+                    st.sidebar.markdown(f"• {col_display}")
+                st.sidebar.markdown(f"... e mais {len(data.columns)-6}")
+            
+            # Status de qualidade dos dados
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("### ⚡ Qualidade dos Dados")
+            
+            # Verificar valores nulos
+            null_count = data.isnull().sum().sum()
+            if null_count > 0:
+                st.sidebar.warning(f"⚠️ {null_count} valores nulos")
+            else:
+                st.sidebar.success("✅ Sem valores nulos")
+            
+            # Verificar duplicatas
+            dup_count = data.duplicated().sum()
+            if dup_count > 0:
+                st.sidebar.warning(f"⚠️ {dup_count} linhas duplicadas")
+            else:
+                st.sidebar.success("✅ Sem duplicatas")
+            
+            # Tamanho do dataset
+            memory_usage = data.memory_usage(deep=True).sum() / 1024 / 1024  # MB
+            st.sidebar.info(f"💾 Tamanho: {memory_usage:.1f} MB")
+
 def setup_sidebar():
-    """Configura a barra lateral - VERSÃO CORRIGIDA"""
-    st.sidebar.header("⚙️ Configurações do Sistema")
+    """Configura a barra lateral"""
+    st.sidebar.header("Configurações do Sistema")
     
-    # CORREÇÃO 1: OpenAI como padrão (mais confiável)
     llm_provider = st.sidebar.selectbox(
-        "🔧 Provedor LLM:",
-        ["openai", "groq"],  # MUDANÇA: OpenAI primeiro para ser padrão
-        help="OpenAI é mais estável. Groq é rápido mas tem rate limits severos",
+        "Provedor LLM:",
+        ["openai", "groq"],
+        help="OpenAI é mais estável. Groq é rápido mas tem rate limits",
         key="llm_provider_select"
     )
     
-    # CORREÇÃO 2: Modelos atualizados (válidos em 2025) - ORDEM OTIMIZADA
     model_options = {
         "groq": [
-            "llama-3.3-70b-versatile",   # PRIMEIRO: Mais poderoso e atualizado
-            "llama-3.1-8b-instant",      # Segundo: Mais rápido
-            "openai/gpt-oss-120b",       # Terceiro: Modelo OpenAI open
-            "qwen/qwen3-32b"             # Quarto: Substituiu mistral
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "openai/gpt-oss-120b",
+            "qwen/qwen3-32b"
         ],
         "openai": [
-            "gpt-4o-mini",              # PRIMEIRO: Mais eficiente e barato
-            "gpt-3.5-turbo",            # Segundo: Clássico confiável
-            "gpt-4",                    # Terceiro: Mais poderoso
-            "gpt-4-turbo-preview"       # Quarto: Mais recente
+            "gpt-4o-mini",
+            "gpt-3.5-turbo",
+            "gpt-4",
+            "gpt-4-turbo-preview"
         ]
     }
     
     model_name = st.sidebar.selectbox(
-        "🎯 Modelo:",
+        "Modelo:",
         model_options[llm_provider],
         index=0,
-        help=f"Modelo {llm_provider.upper()} para usar",
         key="model_select"
     )
     
-    # Configurações específicas para Groq
     if llm_provider == "groq":
-        st.sidebar.warning("⚠️ Groq: Rate limits severos (6000 tokens/min)")
+        st.sidebar.warning("Groq: Rate limits severos")
         
-        # CORREÇÃO 3: Limite de tokens mais baixo para Groq
         max_tokens = st.sidebar.slider(
-            "🔢 Limite Tokens (Resposta):",
+            "Limite Tokens:",
             min_value=100,
-            max_value=600,  # REDUZIDO: de 1000 para 600
-            value=300,      # REDUZIDO: de 400 para 300
+            max_value=600,
+            value=300,
             step=50,
-            help="⚡ GROQ: Mantenha baixo para evitar rate limits!",
             key="tokens_slider"
         )
         
-        # Salvar configuração no session state
         st.session_state.max_tokens_groq = max_tokens
-        
-        st.sidebar.info(f"💡 Tokens: {max_tokens} (Rate limit: {6000-max_tokens} disponíveis)")
-        st.sidebar.markdown("**💡 Dica:** Se der rate limit, reduza tokens ou mude para OpenAI")
-        
-        # Mostrar status da configuração - AVISOS MAIS CLAROS
-        if max_tokens <= 300:
-            st.sidebar.success("✅ Configuração conservadora (menos rate limit)")
-        elif max_tokens <= 400:
-            st.sidebar.info("ℹ️ Configuração balanceada")
-        else:
-            st.sidebar.warning("⚠️ Configuração alta (mais rate limit)")
     else:
-        st.sidebar.success("✅ OpenAI: Mais estável, sem rate limits severos")
-        st.sidebar.info("💰 Usa créditos pagos da sua conta")
-        # Tokens padrão para OpenAI
+        st.sidebar.success("OpenAI: Mais estável")
         max_tokens = 1500
     
     # Status das API Keys
-    st.sidebar.subheader("🔑 Status das Chaves")
+    st.sidebar.subheader("Status das Chaves")
     issues = Config.validate_keys()
     if issues:
         for issue in issues:
             st.sidebar.error(f"❌ {issue}")
-        st.sidebar.markdown("""
-        **⚠️ Configuração Necessária:**
-        1. Edite arquivo `.env`
-        2. Adicione suas API keys:
-           - `GROQ_API_KEY=gsk_...`
-           - `OPENAI_API_KEY=sk_...`
-        3. Reinicie aplicação
-        """)
     else:
         st.sidebar.success("✅ Chaves configuradas")
     
-    # Status do sistema atual
-    if st.session_state.get('system_initialized'):
-        current = st.session_state.get('current_config', 'Não definido')
-        st.sidebar.markdown(f"**🤖 Sistema Ativo:**\n`{current}`")
-        
-        if llm_provider == "groq":
-            current_tokens = st.session_state.get('max_tokens_groq', 300)
-            st.sidebar.markdown(f"**🔢 Tokens configurados:** {current_tokens}")
-    
-    # Mostrar info do dataset se carregado
-    if st.session_state.get('dataset_loaded'):
-        dataset_source = st.session_state.get('dataset_source', 'Desconhecido')
-        dataset_name = os.path.basename(dataset_source) if dataset_source else 'Dataset'
-        st.sidebar.markdown(f"**📊 Dataset Ativo:**\n`{dataset_name}`")
-        
-        # Mostrar informações básicas do dataset
-        dataset_info = st.session_state.get('current_dataset_info', {})
-        if dataset_info.get('shape'):
-            st.sidebar.markdown(f"**📏 Dimensões:** {dataset_info['shape'][0]}×{dataset_info['shape'][1]}")
-    
-    return llm_provider, model_name, locals().get('max_tokens', 1500)
-
-def display_first_rows_improved(df, num_rows=5):
-    """NOVA FUNÇÃO: Mostra primeiras linhas de forma mais legível"""
-    if len(df) == 0:
-        st.warning("Dataset vazio!")
-        return
-    
-    st.subheader(f"📋 Primeiras {num_rows} linhas:")
-    
-    # CORREÇÃO: Mostrar cada linha separadamente para melhor leitura
-    for i in range(min(num_rows, len(df))):
-        with st.expander(f"📄 Linha {i+1}", expanded=(i < 2)):  # Primeiras 2 expandidas
-            row_data = df.iloc[i]
-            
-            # Criar tabela mais legível
-            for col_name, value in row_data.items():
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    st.write(f"**{col_name}:**")
-                with col2:
-                    if pd.isna(value):
-                        st.write("🔍 *Valor ausente*")
-                    else:
-                        st.write(f"`{value}`")
+    return llm_provider, model_name, max_tokens
 
 def load_dataset_section():
     """Seção de carregamento de dataset"""
-    st.header("📁 Carregamento de Dataset")
+    st.header("Carregamento de Dataset CSV")
     
-    tab1, tab2, tab3 = st.tabs(["📤 Upload Local", "🌐 URL Direta", "🔗 URLs Especiais"])
+    tab1, tab2, tab3 = st.tabs(["Upload Local", "URL Direta", "Exemplos"])
     
     dataset_source = None
     
@@ -254,7 +284,7 @@ def load_dataset_section():
         uploaded_file = st.file_uploader(
             "Escolha um arquivo CSV:",
             type=['csv'],
-            help="Upload de arquivo CSV do seu computador",
+            help="Upload de qualquer arquivo CSV do seu computador",
             key="file_uploader"
         )
         
@@ -267,30 +297,26 @@ def load_dataset_section():
                 f.write(uploaded_file.getbuffer())
             
             dataset_source = temp_path
-            # Mostrar nome do arquivo na caixa de texto
             st.text_input(
-                "📁 Arquivo selecionado:", 
+                "Arquivo selecionado:", 
                 value=uploaded_file.name, 
                 disabled=True,
                 key="file_display"
             )
-            st.success(f"✅ Arquivo salvo: {uploaded_file.name}")
+            st.success(f"Arquivo salvo: {uploaded_file.name}")
     
     with tab2:
-        # CORREÇÃO: Key para detectar mudanças automaticamente
         csv_url = st.text_input(
             "URL do arquivo CSV:",
             placeholder="https://exemplo.com/dados.csv",
-            help="Cole a URL direta de um arquivo CSV",
-            key="csv_url_input"  # Key importante para detecção automática
+            help="Cole a URL direta de qualquer arquivo CSV público",
+            key="csv_url_input"
         )
         
-        # CORREÇÃO: Verificação mais robusta da URL
         if csv_url and csv_url.strip():
             url_clean = csv_url.strip()
             if url_clean.startswith(('http://', 'https://')):
                 dataset_source = url_clean
-                # Mostrar nome do arquivo extraído da URL
                 url_filename = url_clean.split('/')[-1]
                 if '?' in url_filename:
                     url_filename = url_filename.split('?')[0]
@@ -298,191 +324,136 @@ def load_dataset_section():
                     url_filename = "arquivo.csv"
                     
                 st.text_input(
-                    "🌐 Arquivo da URL:", 
+                    "Arquivo da URL:", 
                     value=url_filename, 
                     disabled=True,
                     key="url_display"
                 )
-                st.success("✅ URL configurada e pronta para carregamento")
+                st.success("URL configurada")
             else:
-                st.error("❌ URL inválida! Deve começar com http:// ou https://")
+                st.error("URL inválida! Deve começar com http:// ou https://")
     
     with tab3:
-        st.markdown("""
-        **🌐 URLs de Exemplo para Teste Rápido:**
-        
-        **📊 Datasets Públicos Populares:**
-        - **Iris (Flores):** Classificação de espécies - 150 registros
-        - **Tips (Gorjetas):** Análise de restaurante - 244 registros  
-        - **Titanic:** Passageiros do Titanic - 891 registros
-        """)
+        st.markdown("**Datasets de Exemplo (apenas para demonstração):**")
         
         example_url = st.selectbox(
-            "Escolha um dataset de exemplo:",
+            "Escolha um exemplo:",
             ["", 
              "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv",
              "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/tips.csv",
              "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"],
             format_func=lambda x: {
                 "": "Selecione um exemplo...",
-                "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv": "🌸 Iris Dataset (flores)",
-                "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/tips.csv": "🍽️ Tips Dataset (gorjetas)",
-                "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv": "🚢 Titanic Dataset (passageiros)"
+                "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv": "Iris Dataset (classificação)",
+                "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/tips.csv": "Tips Dataset (restaurante)",
+                "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv": "Titanic Dataset (histórico)"
             }.get(x, x),
             key="example_selector"
         )
         
         if example_url:
             dataset_source = example_url
-            # Mostrar nome do arquivo
             example_filename = example_url.split('/')[-1]
             st.text_input(
-                "🔗 Exemplo selecionado:", 
+                "Exemplo selecionado:", 
                 value=example_filename, 
                 disabled=True,
                 key="example_display"
             )
-            st.success(f"✅ Exemplo selecionado: {example_filename}")
+            st.success(f"Exemplo: {example_filename}")
     
     return dataset_source
 
 def initialize_eda_system(llm_provider: str, model_name: str, max_tokens: int):
-    """Inicializa sistema EDA com detecção de mudanças"""
+    """Inicializa sistema EDA"""
     current_config = f"{llm_provider}-{model_name}-{max_tokens}"
     
-    # Verificar se configuração mudou
     if (st.session_state.current_config != current_config or 
         not st.session_state.system_initialized):
         
-        with st.spinner(f"🤖 Inicializando sistema: {llm_provider.upper()} - {model_name} (tokens: {max_tokens})"):
+        with st.spinner(f"Inicializando: {llm_provider.upper()} - {model_name}"):
             try:
-                # Limpar sistema anterior se existir
                 if 'eda_system' in st.session_state:
                     del st.session_state.eda_system
                 
-                # Resetar dataset se configuração mudou
                 if st.session_state.current_config != current_config:
                     if st.session_state.get('dataset_loaded'):
                         st.session_state.dataset_loaded = False
                         st.session_state.chat_history = []
-                        st.warning("⚠️ Configuração do modelo mudou! Recarregue seu dataset.")
+                        st.warning("Configuração mudou! Recarregue dataset.")
                 
-                # Inicializar novo sistema
                 eda_system = EDACrewSystem(llm_provider, model_name, max_tokens)
                 
-                # Salvar no estado
                 st.session_state.eda_system = eda_system
                 st.session_state.current_config = current_config
                 st.session_state.system_initialized = True
                 
-                st.success(f"✅ Sistema inicializado: {llm_provider.upper()} - {model_name}")
+                st.success(f"Sistema inicializado: {llm_provider.upper()}")
                 return True
                 
             except Exception as e:
                 st.session_state.system_initialized = False
                 error_msg = str(e)
                 
-                # Usar função de rate limit handler
                 if handle_rate_limit_error(error_msg, llm_provider):
                     return False
                 elif "api" in error_msg.lower() and "key" in error_msg.lower():
-                    st.error(f"🔑 **Erro de API Key - {llm_provider.upper()}**\n\nVerifique se a chave está correta no arquivo .env")
+                    st.error(f"Erro de API Key - {llm_provider.upper()}")
                 else:
-                    st.error(f"❌ **Erro de inicialização {llm_provider.upper()}:**\n{error_msg}")
+                    st.error(f"Erro de inicialização: {error_msg}")
                 
                 return False
     
     return True
 
 def process_dataset_loading(dataset_source: str):
-    """Processa carregamento do dataset - VERSÃO CORRIGIDA"""
-    # CORREÇÃO: Botões com textos mais apropriados
-    col1, col2 = st.columns([4, 1])  # Botão principal maior
+    """Processa carregamento do dataset"""
+    col1, col2 = st.columns([4, 1])
     
     with col1:
         load_button = st.button(
-            "📊 Processar Carregamento",  # MUDANÇA: Texto mais apropriado para esta fase
+            "Processar Carregamento",
             type="primary", 
             use_container_width=True,
             key="load_dataset_btn"
         )
     
     with col2:
-        # Botão finalizar também na página de carregamento
         finalizar_load_btn = st.button(
-            "✅ Finalizar", 
+            "Finalizar", 
             key="finalizar_load", 
-            use_container_width=True,
-            help="Encerrar aplicação"
+            use_container_width=True
         )
     
-    # Processar botão finalizar
     if finalizar_load_btn:
         finalize_session()
         return
     
     if load_button:
         if not st.session_state.get('system_initialized'):
-            st.error("❌ Sistema não inicializado! Verifique configurações na sidebar.")
+            st.error("Sistema não inicializado!")
             return
         
-        # Resetar estado antes do carregamento
         st.session_state.dataset_loaded = False
         st.session_state.chat_history = []
         st.session_state.session_finalized = False
-        
-        # Salvar fonte do dataset
         st.session_state.dataset_source = dataset_source
         
-        with st.spinner("📊 Carregando e analisando dataset..."):
+        with st.spinner("Carregando dataset..."):
             try:
-                # Mostrar progresso
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                status_text.text("📄 Inicializando carregamento...")
-                progress_bar.progress(20)
-                
-                # Carregar dataset com o sistema EDA
-                status_text.text("📥 Baixando/lendo arquivo CSV...")
-                progress_bar.progress(50)
-                
                 result = st.session_state.eda_system.load_dataset(dataset_source)
                 
-                status_text.text("🧠 Executando análise inicial...")
-                progress_bar.progress(80)
-                
-                # Verificar resultado
                 has_error = any(keyword in result.lower() for keyword in 
-                              ['erro', 'error', 'exception', 'rate limit', 'failed', 'badrequest'])
-                
-                progress_bar.progress(100)
-                status_text.empty()
-                progress_bar.empty()
+                              ['erro', 'error', 'exception', 'rate limit', 'failed'])
                 
                 if has_error:
-                    # ERRO - Não marcar como carregado
                     st.session_state.dataset_loaded = False
-                    
-                    # Usar função de rate limit handler
                     if not handle_rate_limit_error(result, st.session_state.get('current_config', '')):
-                        if "badrequest" in result.lower() and "provider not provided" in result.lower():
-                            st.error("🔧 **Erro de configuração do modelo Groq.** Mude para OpenAI temporariamente.")
-                        else:
-                            st.error("❌ **Falha no carregamento**")
-                            
-                        st.markdown(f'<div class="warning-box"><strong>Detalhes do erro:</strong><br>{result}</div>', 
-                                  unsafe_allow_html=True)
-                    
-                    # Sugestões baseadas no tipo de erro
-                    if "groq" in st.session_state.get('current_config', '').lower():
-                        st.info("💡 **Sugestão:** Mude para OpenAI na sidebar (mais estável) ou reduza tokens para Groq.")
-                    
+                        st.error("Falha no carregamento")
+                        st.markdown(f'<div class="warning-box">{result}</div>', unsafe_allow_html=True)
                 else:
-                    # SUCESSO - Marcar como carregado
                     st.session_state.dataset_loaded = True
                     
-                    # Extrair e salvar informações do dataset
                     dataset_name = os.path.basename(dataset_source) if dataset_source else 'Dataset'
                     if dataset_source.startswith(('http://', 'https://')):
                         dataset_name = dataset_source.split('/')[-1]
@@ -496,13 +467,11 @@ def process_dataset_loading(dataset_source: str):
                         'analysis_result': result
                     }
                     
-                    # Mostrar resultado
                     st.markdown('<div class="agent-response">', unsafe_allow_html=True)
-                    st.markdown("**🤖 Agente Explorador de Dados:**")
+                    st.markdown("**Agente Explorador de Dados:**")
                     st.markdown(result)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Salvar no histórico
                     st.session_state.chat_history.append({
                         'type': 'system',
                         'message': f'Dataset carregado: {dataset_name}',
@@ -510,19 +479,17 @@ def process_dataset_loading(dataset_source: str):
                         'dataset_info': st.session_state.current_dataset_info
                     })
                     
-                    st.success("✅ **Dataset carregado com sucesso!** Agora você pode fazer perguntas sobre os dados.")
+                    st.success("Dataset carregado! Agora pode fazer perguntas sobre os dados.")
                     st.balloons()
                     
-                    # CORREÇÃO: Botão maior e texto mais apropriado
                     st.markdown("---")
-                    col1, col2, col3 = st.columns([1, 2, 1])  # Centralizar
+                    col1, col2, col3 = st.columns([1, 2, 1])
                     with col2:
                         if st.button(
-                            "🚀 Iniciar Análise Interativa", 
+                            "Iniciar Análise Interativa", 
                             type="primary", 
                             key="goto_chat",
-                            use_container_width=True,  # Botão maior
-                            help="Ir para o chat interativo com os agentes"
+                            use_container_width=True
                         ):
                             st.rerun()
             
@@ -530,22 +497,15 @@ def process_dataset_loading(dataset_source: str):
                 st.session_state.dataset_loaded = False
                 error_msg = str(e)
                 
-                # Usar função de rate limit handler
                 if not handle_rate_limit_error(error_msg, st.session_state.get('current_config', '')):
-                    if "api" in error_msg.lower() and "key" in error_msg.lower():
-                        st.error("🔑 **Erro de API Key!** Verifique suas chaves no arquivo .env")
-                    else:
-                        st.error(f"❌ **Erro técnico:** {error_msg}")
-                
-                # Sugestão de solução
-                st.info("💡 **Dicas para resolver:**\n- Use OpenAI em vez de Groq\n- Verifique suas API keys\n- Tente um arquivo CSV menor")
+                    st.error(f"Erro técnico: {error_msg}")
 
 def chat_interface():
     """Interface de chat com agentes"""
-    st.header("💬 Chat com Agentes Inteligentes")
+    st.header("Chat com Agentes Inteligentes")
     
     if not st.session_state.dataset_loaded:
-        st.warning("⚠️ Carregue um dataset primeiro!")
+        st.warning("Carregue um dataset primeiro!")
         return
     
     # Mostrar informações do dataset atual
@@ -554,57 +514,47 @@ def chat_interface():
         dataset_source = dataset_info.get('source', '')
         dataset_display = dataset_source
         
-        # Encurtar URL se muito longa
         if len(dataset_display) > 60:
             dataset_display = dataset_display[:57] + "..."
             
         st.markdown(f"""
         <div class="dataset-info">
-        <strong>📊 Dataset Ativo:</strong> {dataset_info.get('name', 'Desconhecido')}<br>
-        <strong>📍 Fonte:</strong> {dataset_display}<br>
-        <strong>⏰ Carregado:</strong> {dataset_info.get('loaded_at', 'N/A')[:16].replace('T', ' ')}
+        <strong>Dataset Ativo:</strong> {dataset_info.get('name', 'Desconhecido')}<br>
+        <strong>Fonte:</strong> {dataset_display}<br>
+        <strong>Carregado:</strong> {dataset_info.get('loaded_at', 'N/A')[:16].replace('T', ' ')}
         </div>
         """, unsafe_allow_html=True)
     
     # Mostrar histórico de conversas
     if st.session_state.chat_history:
-        st.subheader("📃 Histórico de Conversas")
+        st.subheader("Histórico de Conversas")
         
         for i, chat in enumerate(st.session_state.chat_history):
             if chat['type'] == 'user':
                 st.markdown(f"""
                 <div class="chat-message">
-                <strong>👤 Você:</strong> {chat["message"]}
+                <strong>Você:</strong> {chat["message"]}
                 </div>
                 """, unsafe_allow_html=True)
                 
             elif chat['type'] == 'agent':
                 st.markdown(f"""
                 <div class="agent-response">
-                <strong>🤖 Agente:</strong><br>
+                <strong>Agente:</strong><br>
                 {chat["response"]}
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Mostrar gráficos se houver
-                if 'image_path' in chat and chat.get('image_path'):
-                    if os.path.exists(chat['image_path']):
-                        try:
-                            image = Image.open(chat['image_path'])
-                            st.image(image, caption="Visualização gerada", use_column_width=True)
-                        except Exception as e:
-                            st.warning(f"⚠️ Erro ao exibir gráfico: {str(e)}")
     
     # Nova pergunta
-    st.subheader("❓ Faça sua Pergunta")
+    st.subheader("Faça sua Pergunta")
     
-    # Exemplos em expander
-    with st.expander("💡 Exemplos de Perguntas Úteis"):
+    # Exemplos gerais (não específicos do Titanic)
+    with st.expander("Exemplos de Perguntas"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("""
-            **📊 Informações Básicas:**
+            **Informações Básicas:**
             - Qual arquivo CSV estamos analisando?
             - Quantas linhas e colunas tem o dataset?
             - Quais são os tipos de dados?
@@ -614,69 +564,68 @@ def chat_interface():
             
         with col2:
             st.markdown("""
-            **🔍 Análises Avançadas:**
-            - Mostre estatísticas descritivas completas
-            - Existem outliers nos dados?
-            - Como as variáveis se relacionam entre si?
-            - Crie um gráfico de correlação
-            - Quais são suas conclusões sobre os dados?
+            **Análises com Gráficos:**
+            - Gera gráfico ilustrando tema do arquivo
+            - Cria matriz de correlação entre variáveis
+            - Mostra distribuição das variáveis numéricas
+            - Faz análise das variáveis categóricas
+            - Visualiza todas as relações nos dados
             """)
     
     # Campo de pergunta
     user_question = st.text_area(
         "Digite sua pergunta sobre os dados:",
         height=100,
-        placeholder="Ex: Qual arquivo CSV estamos analisando?",
+        placeholder="Ex: Gera gráfico ilustrando tema do arquivo",
         key="user_question_input"
     )
     
-    # SEÇÃO DE BOTÕES - Layout garantido
+    # Botões de ação
     st.markdown("---")
-    st.markdown("### 🎛️ Ações Disponíveis")
+    st.markdown("### Ações Disponíveis")
     
-    # Criar 4 colunas para os botões
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         btn_enviar = st.button(
-            label="🤖 Enviar",
+            label="Enviar",
             key="btn_enviar_question",
-            help="Enviar pergunta para análise pelos agentes",
+            help="Enviar pergunta para análise",
             use_container_width=True,
             type="primary"
         )
     
     with col2:
         btn_conclusoes = st.button(
-            label="📋 Conclusões", 
+            label="Conclusões", 
             key="btn_get_conclusions",
-            help="Obter conclusões consolidadas de todas as análises",
+            help="Obter conclusões consolidadas",
             use_container_width=True
         )
     
     with col3:
         btn_nova_sessao = st.button(
-            label="🔄 Nova Sessão",
+            label="Nova Sessão",
             key="btn_restart_session", 
-            help="Limpar histórico e carregar novo dataset",
+            help="Carregar novo dataset",
             use_container_width=True
         )
     
     with col4:
         btn_finalizar = st.button(
-            label="✅ Finalizar",
+            label="Finalizar",
             key="btn_finalize_session",
             help="Encerrar sessão atual",
             use_container_width=True,
             type="secondary"
         )
     
-    # Processar ações dos botões
+    # Processar ações
     if btn_enviar:
         if user_question and user_question.strip():
             process_user_question(user_question.strip())
         else:
-            st.warning("⚠️ Digite uma pergunta primeiro!")
+            st.warning("Digite uma pergunta primeiro!")
     
     if btn_conclusoes:
         get_final_conclusions()
@@ -688,83 +637,299 @@ def chat_interface():
         finalize_session()
 
 def process_user_question(question: str):
-    """Processa pergunta do usuário com contexto do dataset"""
-    with st.spinner(f"🤖 Agentes analisando: {question[:50]}..."):
+    """Versão corrigida sem modificação de widget"""
+    
+    # Detectar solicitações de visualização
+    viz_keywords = ['gráfico', 'grafico', 'chart', 'plot', 'visualiza', 
+                   'correlação', 'correlacao', 'distribuição', 'distribuicao', 
+                   'heatmap', 'histograma', 'mostra', 'gera', 'cria', 'ilustra',
+                   'matriz', 'scatter', 'todas as visualizações', 'visualizações completas']
+    
+    is_viz_request = any(keyword in question.lower() for keyword in viz_keywords)
+    
+    # Adicionar pergunta ao histórico ANTES do processamento
+    st.session_state.chat_history.append({
+        'type': 'user',
+        'message': question,
+        'timestamp': datetime.now().isoformat()
+    })
+    
+    if is_viz_request:
+        # PROCESSAMENTO DE VISUALIZAÇÕES
+        st.markdown("## 📊 GRÁFICOS GERADOS")
+        
         try:
-            # Adicionar contexto do dataset à pergunta para melhor resposta
-            dataset_info = st.session_state.get('current_dataset_info', {})
+            # Acessar dados diretamente
+            eda_system = st.session_state.eda_system
+            data = eda_system.current_dataset
+            dataset_name = eda_system.dataset_info.get('name', 'Dataset')
             
-            # Mostrar progresso
-            progress = st.progress(0)
-            status = st.empty()
+            st.success(f"✅ Gerando gráficos para: {dataset_name}")
             
-            status.text("🧠 Processando pergunta...")
-            progress.progress(30)
+            # Preparar contadores para keys únicos
+            chart_counter = len(st.session_state.chat_history)
             
-            status.text("🤖 Agentes colaborando...")
-            progress.progress(60)
+            # Identificar tipos de colunas
+            numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
+            categorical_cols = data.select_dtypes(include=['object']).columns.tolist()
             
-            # Executar análise
-            result = st.session_state.eda_system.analyze_question(question)
+            charts_generated = []
             
-            status.text("📝 Preparando resposta...")
-            progress.progress(90)
+            # 1. INFORMAÇÕES GERAIS DO DATASET
+            st.markdown("### 📋 Resumo do Dataset")
+            col1, col2, col3, col4 = st.columns(4)
             
-            # Limpar progresso
-            progress.progress(100)
-            progress.empty()
-            status.empty()
+            with col1:
+                st.metric("Linhas", data.shape[0])
+            with col2:
+                st.metric("Colunas", data.shape[1])
+            with col3:
+                st.metric("Numéricas", len(numeric_cols))
+            with col4:
+                st.metric("Categóricas", len(categorical_cols))
             
-            # Adicionar ao histórico
-            st.session_state.chat_history.append({
-                'type': 'user',
-                'message': question,
-                'timestamp': datetime.now().isoformat()
-            })
+            # 2. MATRIZ DE CORRELAÇÃO
+            if len(numeric_cols) >= 2:
+                st.markdown("### 🔗 Matriz de Correlação")
+                
+                corr_matrix = data[numeric_cols].corr()
+                fig_corr = px.imshow(
+                    corr_matrix,
+                    text_auto=True,
+                    title="Matriz de Correlação entre Variáveis Numéricas",
+                    color_continuous_scale="RdBu_r",
+                    aspect="auto"
+                )
+                fig_corr.update_layout(width=800, height=600)
+                
+                # USAR CONTAINER ÚNICO PARA EVITAR CONFLITOS
+                st.plotly_chart(fig_corr, use_container_width=True, key=f"corr_matrix_{chart_counter}")
+                charts_generated.append("Matriz de Correlação")
+                
+                # Análise das correlações mais fortes
+                corr_abs = corr_matrix.abs()
+                np.fill_diagonal(corr_abs.values, 0)
+                if not corr_abs.empty and corr_abs.max().max() > 0:
+                    max_corr = corr_abs.max().max()
+                    max_corr_idx = corr_abs.stack().idxmax()
+                    actual_corr = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
+                    st.info(f"Correlação mais forte: {max_corr_idx[0]} ↔ {max_corr_idx[1]} ({actual_corr:.3f})")
             
-            st.session_state.chat_history.append({
-                'type': 'agent', 
-                'response': result,
-                'timestamp': datetime.now().isoformat()
-            })
+            # 3. DISTRIBUIÇÕES DAS VARIÁVEIS NUMÉRICAS
+            if len(numeric_cols) > 0:
+                st.markdown("### 📊 Distribuições das Variáveis Numéricas")
+                
+                # Mostrar até 4 distribuições em 2 colunas
+                num_plots = min(len(numeric_cols), 4)
+                
+                for i, col in enumerate(numeric_cols[:num_plots]):
+                    st.markdown(f"**Distribuição de {col}:**")
+                    
+                    # Histograma com marginal box plot
+                    fig_hist = px.histogram(
+                        data, 
+                        x=col, 
+                        title=f"Distribuição: {col}",
+                        marginal="box",
+                        nbins=min(30, data[col].nunique()) if data[col].nunique() > 2 else 10
+                    )
+                    
+                    st.plotly_chart(fig_hist, use_container_width=True, key=f"hist_{col}_{chart_counter}")
+                    
+                    # Estatísticas básicas
+                    stats = data[col].describe()
+                    st.caption(f"Média: {stats['mean']:.2f} | Mediana: {stats['50%']:.2f} | Desvio: {stats['std']:.2f}")
+                
+                charts_generated.append(f"Distribuições de {num_plots} variáveis")
             
-            # Rerun para mostrar nova conversa
-            st.rerun()
+            # 4. RELAÇÕES ENTRE VARIÁVEIS NUMÉRICAS
+            if len(numeric_cols) >= 2:
+                st.markdown("### 🎯 Relações entre Variáveis")
+                
+                # Scatter plot das duas primeiras variáveis
+                x_var = numeric_cols[0]
+                y_var = numeric_cols[1]
+                
+                # Se há variável categórica, usar para colorir
+                if len(categorical_cols) > 0:
+                    color_var = categorical_cols[0]
+                    unique_cats = data[color_var].nunique()
+                    
+                    if unique_cats <= 10:  # Máximo 10 categorias
+                        fig_scatter = px.scatter(
+                            data, 
+                            x=x_var, 
+                            y=y_var, 
+                            color=color_var,
+                            title=f"{x_var} vs {y_var} (por {color_var})"
+                        )
+                    else:
+                        fig_scatter = px.scatter(
+                            data, 
+                            x=x_var, 
+                            y=y_var,
+                            title=f"{x_var} vs {y_var}"
+                        )
+                else:
+                    fig_scatter = px.scatter(
+                        data, 
+                        x=x_var, 
+                        y=y_var,
+                        title=f"{x_var} vs {y_var}"
+                    )
+                
+                st.plotly_chart(fig_scatter, use_container_width=True, key=f"scatter_{chart_counter}")
+                charts_generated.append(f"Scatter plot {x_var} vs {y_var}")
+            
+            # 5. ANÁLISE POR CATEGORIAS (específico para dados como Titanic)
+            if len(categorical_cols) > 0 and len(numeric_cols) > 0:
+                st.markdown("### 📈 Análise por Categorias")
+                
+                # Procurar colunas de sobrevivência e gênero
+                survival_cols = [col for col in categorical_cols if any(word in col.lower() 
+                                for word in ['survived', 'survival', 'outcome'])]
+                gender_cols = [col for col in categorical_cols if any(word in col.lower() 
+                              for word in ['sex', 'gender'])]
+                
+                if survival_cols and gender_cols:
+                    survival_col = survival_cols[0]
+                    gender_col = gender_cols[0]
+                    
+                    st.markdown(f"**Análise de {survival_col} por {gender_col}:**")
+                    
+                    # Gráfico de barras agrupadas
+                    fig_survival = px.histogram(
+                        data,
+                        x=gender_col,
+                        color=survival_col,
+                        title=f"Distribuição de {survival_col} por {gender_col}",
+                        barmode='group'
+                    )
+                    st.plotly_chart(fig_survival, use_container_width=True, key=f"survival_{chart_counter}")
+                    
+                    # Tabela cruzada
+                    cross_tab = pd.crosstab(data[gender_col], data[survival_col], margins=True)
+                    st.dataframe(cross_tab, use_container_width=True)
+                    
+                    charts_generated.append(f"Análise de {survival_col} por {gender_col}")
+                
+                else:
+                    # Análise geral por categorias
+                    cat_var = categorical_cols[0]
+                    num_var = numeric_cols[0]
+                    
+                    unique_cats = data[cat_var].nunique()
+                    if unique_cats <= 15:  # Máximo 15 categorias
+                        
+                        # Box plot
+                        fig_box = px.box(
+                            data, 
+                            x=cat_var, 
+                            y=num_var,
+                            title=f"Distribuição de {num_var} por {cat_var}"
+                        )
+                        st.plotly_chart(fig_box, use_container_width=True, key=f"box_{chart_counter}")
+                        charts_generated.append(f"Box plot {num_var} por {cat_var}")
+            
+            # 6. AMOSTRA DOS DADOS
+            st.markdown("### 🔍 Amostra dos Dados")
+            st.dataframe(data.head(10), use_container_width=True)
+            
+            # 7. ESTATÍSTICAS DESCRITIVAS
+            if len(numeric_cols) > 0:
+                st.markdown("### 📈 Estatísticas Descritivas")
+                desc_stats = data[numeric_cols].describe()
+                st.dataframe(desc_stats, use_container_width=True)
+            
+            # RESPOSTA CONSOLIDADA
+            result = f"""✅ **GRÁFICOS EXIBIDOS COM SUCESSO!**
+
+**Dataset analisado:** {dataset_name}
+• Dimensões: {data.shape[0]} linhas × {data.shape[1]} colunas
+• Variáveis numéricas: {len(numeric_cols)}
+• Variáveis categóricas: {len(categorical_cols)}
+
+**Gráficos gerados:**
+{chr(10).join([f"• {chart}" for chart in charts_generated])}
+
+**Todos os gráficos são interativos** - você pode fazer zoom, filtrar e explorar os dados.
+
+**Os gráficos estão visíveis ACIMA desta mensagem!** Se não consegue ver, role a tela para cima."""
             
         except Exception as e:
-            error_msg = str(e)
-            if not handle_rate_limit_error(error_msg, st.session_state.get('current_config', '')):
-                st.error(f"❌ **Erro ao processar pergunta:** {error_msg}")
+            st.error(f"Erro ao gerar gráficos: {str(e)}")
+            result = f"Erro ao gerar visualizações: {str(e)}"
+    
+    else:
+        # PROCESSAMENTO DE PERGUNTAS NORMAIS
+        with st.spinner("🤖 Analisando sua pergunta..."):
+            try:
+                # Usar o sistema CrewAI para perguntas normais
+                result = st.session_state.eda_system.analyze_question(question)
+                
+                # Verificar se há erro de rate limit
+                if any(keyword in result.lower() for keyword in 
+                      ['rate limit', 'erro', 'error', 'exception']):
+                    
+                    current_config = st.session_state.get('current_config', '')
+                    if 'groq' in current_config:
+                        if not handle_rate_limit_error(result, 'groq'):
+                            st.error("Erro na análise da pergunta")
+                        return  # Sair sem adicionar ao histórico se há erro
+                    else:
+                        st.error(f"Erro: {result}")
+                        return
+                
+            except Exception as e:
+                error_msg = str(e)
+                current_config = st.session_state.get('current_config', '')
+                
+                if 'groq' in current_config and 'rate' in error_msg.lower():
+                    if not handle_rate_limit_error(error_msg, 'groq'):
+                        st.error(f"Erro técnico: {error_msg}")
+                else:
+                    st.error(f"Erro ao processar pergunta: {error_msg}")
+                return
+    
+    # Adicionar resposta ao histórico
+    st.session_state.chat_history.append({
+        'type': 'agent', 
+        'response': result,
+        'timestamp': datetime.now().isoformat(),
+        'has_visualization': is_viz_request
+    })
+    
+    # MOSTRAR RESPOSTA IMEDIATAMENTE (sem rerun)
+    if is_viz_request:
+        # Para visualizações, a resposta já foi mostrada acima
+        st.markdown("---")
+        st.success("✅ Visualizações geradas com sucesso! Veja os gráficos acima.")
+    else:
+        # Para perguntas normais, mostrar a resposta
+        st.markdown(f"""
+        <div class="agent-response">
+        <strong>🤖 Resposta do Agente:</strong><br>
+        {result}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # REMOÇÃO DA LINHA PROBLEMÁTICA:
+    # NÃO podemos modificar st.session_state.user_question_input aqui
+    # O Streamlit não permite modificar widgets após instantiação
+
 
 def get_final_conclusions():
     """Obter conclusões finais consolidadas"""
-    with st.spinner("🤖 Gerando conclusões consolidadas..."):
+    with st.spinner("Gerando conclusões consolidadas..."):
         try:
-            progress = st.progress(0)
-            status = st.empty()
-            
-            status.text("📊 Revisando todas as análises...")
-            progress.progress(40)
-            
-            status.text("🧠 Consolidando insights...")
-            progress.progress(70)
-            
             conclusions = st.session_state.eda_system.get_conclusions()
             
-            status.text("📋 Preparando relatório final...")
-            progress.progress(100)
-            
-            # Limpar progresso
-            progress.empty()
-            status.empty()
-            
-            # Adicionar conclusões ao histórico
             dataset_info = st.session_state.get('current_dataset_info', {})
             dataset_name = dataset_info.get('name', 'Dataset')
             
             st.session_state.chat_history.append({
                 'type': 'agent',
-                'response': f"**📋 CONCLUSÕES FINAIS - {dataset_name}:**\n\n{conclusions}",
+                'response': f"**CONCLUSÕES FINAIS - {dataset_name}:**\n\n{conclusions}",
                 'timestamp': datetime.now().isoformat(),
                 'is_conclusion': True
             })
@@ -774,7 +939,7 @@ def get_final_conclusions():
         except Exception as e:
             error_msg = str(e)
             if not handle_rate_limit_error(error_msg, st.session_state.get('current_config', '')):
-                st.error(f"❌ **Erro ao gerar conclusões:** {error_msg}")
+                st.error(f"Erro ao gerar conclusões: {error_msg}")
 
 def finalize_session():
     """Finalizar sessão com resumo"""
@@ -782,13 +947,12 @@ def finalize_session():
     
     st.markdown("""
     <div class="success-box">
-    <h3>✅ Sessão Finalizada com Sucesso!</h3>
+    <h3>Sessão Finalizada com Sucesso!</h3>
     <p><strong>Obrigado por usar o EDA Agente Inteligente!</strong></p>
     <p>Sua análise exploratória foi concluída.</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Estatísticas da sessão
     if st.session_state.chat_history:
         total_questions = len([c for c in st.session_state.chat_history if c['type'] == 'user'])
         dataset_info = st.session_state.get('current_dataset_info', {})
@@ -796,7 +960,7 @@ def finalize_session():
         
         st.markdown(f"""
         <div class="dataset-info">
-        <strong>📊 Resumo da Sessão:</strong><br>
+        <strong>Resumo da Sessão:</strong><br>
         • <strong>Dataset analisado:</strong> {dataset_name}<br>
         • <strong>Perguntas respondidas:</strong> {total_questions}<br>
         • <strong>Análises realizadas:</strong> {len(st.session_state.chat_history)} interações<br>
@@ -804,16 +968,14 @@ def finalize_session():
         </div>
         """, unsafe_allow_html=True)
     
-    # Opções finais
-    st.markdown("### 📋 Opções Finais")
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("💾 Baixar Histórico", key="download_history_final", use_container_width=True):
+        if st.button("Baixar Histórico", key="download_history_final", use_container_width=True):
             download_history()
     
     with col2:
-        if st.button("🚀 Nova Sessão", key="new_session_from_final", use_container_width=True):
+        if st.button("Nova Sessão", key="new_session_from_final", use_container_width=True):
             restart_session_to_upload()
 
 def download_history():
@@ -832,7 +994,6 @@ def download_history():
         
         json_str = json.dumps(history_data, indent=2, ensure_ascii=False)
         
-        # Nome do arquivo baseado no dataset
         dataset_name = st.session_state.get('current_dataset_info', {}).get('name', 'dataset')
         if dataset_name.endswith('.csv'):
             dataset_name = dataset_name[:-4]
@@ -840,17 +1001,15 @@ def download_history():
         filename = f"eda_analysis_{dataset_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
         
         st.download_button(
-            label="📥 Download Histórico (JSON)",
+            label="Download Histórico (JSON)",
             data=json_str,
             file_name=filename,
             mime="application/json",
-            help="Baixar histórico completo da sessão de análise",
             key="download_btn"
         )
 
 def restart_session_to_upload():
-    """Reiniciar sessão - VOLTA PARA PÁGINA DE UPLOAD"""
-    # Limpar APENAS dados da sessão, mantém sistema inicializado
+    """Reiniciar sessão"""
     session_keys_to_clear = [
         'dataset_loaded', 
         'chat_history', 
@@ -864,7 +1023,7 @@ def restart_session_to_upload():
             del st.session_state[key]
     
     clean_temp_files()
-    st.success("🔄 **Nova sessão iniciada!** Carregue um novo dataset para análise.")
+    st.success("Nova sessão iniciada! Carregue um novo dataset.")
     st.rerun()
 
 def main():
@@ -872,27 +1031,30 @@ def main():
     # Cabeçalho principal
     st.markdown("""
     <div class="main-header">
-        <h1>🤖 EDA Agente Inteligente</h1>
-        <p>Análise Exploratória de Dados com Agentes CrewAI</p>
-        <small>Powered by Groq & OpenAI</small>
+        <h1>EDA Agente Inteligente</h1>
+        <p>Análise Exploratória de Dados CSV com Agentes CrewAI</p>
+        <small>Funciona com qualquer CSV • Localhost & Railway</small>
     </div>
     """, unsafe_allow_html=True)
     
-    # Inicializar todos os estados da sessão
+    # Inicializar estados
     initialize_session_state()
     
-    # Se sessão foi finalizada, mostrar apenas página final
+    # Se sessão foi finalizada
     if st.session_state.get('session_finalized'):
         finalize_session()
         return
     
-    # Configurar sidebar e obter configurações
+    # Configurar sidebar
     llm_provider, model_name, max_tokens = setup_sidebar()
     
-    # Verificar se API keys estão configuradas
+    # Sidebar de visualizações
+    add_visualization_sidebar()
+    
+    # Verificar API keys
     issues = Config.validate_keys()
     if issues:
-        st.error("⚠️ **API Keys não configuradas!**")
+        st.error("API Keys não configuradas!")
         st.markdown("""
         **Para usar o sistema:**
         1. **Edite o arquivo `.env`** na pasta do projeto
@@ -901,69 +1063,56 @@ def main():
            GROQ_API_KEY=gsk_sua_chave_groq_aqui
            OPENAI_API_KEY=sk_sua_chave_openai_aqui
            ```
-        3. **Reinicie a aplicação** (Ctrl+C e execute novamente)
-        
-        **Como obter as chaves:**
-        - **Groq**: https://console.groq.com → API Keys
-        - **OpenAI**: https://platform.openai.com → API Keys
+        3. **Reinicie a aplicação**
         """)
         st.stop()
     
-    # Inicializar sistema EDA
+    # Inicializar sistema
     system_ready = initialize_eda_system(llm_provider, model_name, max_tokens)
     
     if not system_ready:
-        st.error("❌ **Sistema não pôde ser inicializado.** Verifique as configurações na sidebar.")
-        st.info("💡 **Dica:** Se usar Groq, tente OpenAI ou reduza o limite de tokens.")
+        st.error("Sistema não pôde ser inicializado.")
         return
     
-    # Interface principal baseada no estado
+    # Interface principal
     if not st.session_state.dataset_loaded:
-        # Página de carregamento de dataset
+        # Página de carregamento
         dataset_source = load_dataset_section()
         
-        # CORREÇÃO: BOTÃO FINALIZAR SEMPRE VISÍVEL NA PÁGINA INICIAL
-        # Mesmo quando não há dataset selecionado, mostrar botão Finalizar
         if not dataset_source:
             st.markdown("---")
-            st.markdown("### ✅ Opções Gerais")
+            st.markdown("### Opções Gerais")
             col1, col2, col3 = st.columns([2, 1, 2])
             with col2:
-                if st.button(
-                    "✅ Finalizar", 
-                    key="finalizar_inicial",
-                    use_container_width=True,
-                    help="Encerrar aplicação"
-                ):
+                if st.button("Finalizar", key="finalizar_inicial", use_container_width=True):
                     finalize_session()
         
-        # Se há dataset selecionado, mostrar botão de processamento
         if dataset_source:
             process_dataset_loading(dataset_source)
     else:
-        # Interface de chat com dataset carregado
+        # Interface de chat
         chat_interface()
         
-        # Opção na sidebar para carregar novo dataset
+        # Opções na sidebar
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🔄 Opções da Sessão")
-        if st.sidebar.button("📁 Carregar Novo Dataset", use_container_width=True, key="sidebar_new_dataset"):
+        st.sidebar.markdown("### Opções da Sessão")
+        if st.sidebar.button("Carregar Novo Dataset", use_container_width=True, key="sidebar_new_dataset"):
             restart_session_to_upload()
         
-        if st.sidebar.button("✅ Finalizar Sessão", use_container_width=True, key="sidebar_finalize"):
+        if st.sidebar.button("Finalizar Sessão", use_container_width=True, key="sidebar_finalize"):
             finalize_session()
     
-    # Rodapé informativo
+    # Rodapé
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #666; padding: 1rem;">
-        🤖 <strong>EDA Agente Inteligente</strong> | 
+        <strong>EDA Agente Inteligente</strong> | 
         Powered by <strong>CrewAI</strong> • <strong>Streamlit</strong> • <strong>Groq</strong>/<strong>OpenAI</strong><br>
-        <small>Use o botão "✅ Finalizar" para encerrar sessões • Versão Sincronizada</small>
+        <small><strong>Sistema Universal:</strong> Analisa qualquer arquivo CSV com visualizações automáticas</small>
     </div>
     """, unsafe_allow_html=True)
     
-    # Limpeza automática de arquivos temporários
+    # Limpeza
     clean_temp_files()
 
 if __name__ == "__main__":
