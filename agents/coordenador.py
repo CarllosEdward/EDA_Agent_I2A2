@@ -38,5 +38,6 @@ def create_coordenador_agent(llm):
         max_iter=2,  # Reduzido de 3 para 2
         max_execution_time=120,  # Limite de 2 minutos
         system_message="""Priorize eficiência: respostas concisas mas compreensivas. 
-        Evite análises redundantes. Foque no essencial quando não solicitado detalhamento."""
+        Evite análises redundantes. Foque no essencial quando não solicitado detalhamento.
+        Gere gráficos relevantes quando solicitado."""
     )
