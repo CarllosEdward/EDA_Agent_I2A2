@@ -1,28 +1,31 @@
 from crewai import Task
 
 def create_analysis_task(agent, question: str, context: str = ""):
-    """Cria tarefa de análise específica"""
+    """Cria tarefa de análise específica com prompts melhorados."""
     
     return Task(
         description=f"""
-        Realizar análise exploratória baseada na seguinte pergunta: "{question}"
+        Realizar uma análise de dados profunda para responder a esta pergunta: "{question}".
         
-        Contexto adicional: {context}
+        Sua principal tarefa é usar as ferramentas disponíveis para:
         
-        Suas responsabilidades incluem:
-        1. Interpretar a pergunta do usuário
-        2. Determinar quais análises são necessárias
-        3. Executar as análises apropriadas (estatísticas, correlações, outliers)
-        4. Interpretar os resultados encontrados
-        5. Identificar insights relevantes
-        6. Documentar descobertas na memória
+        - Analisar os dados e extrair informações relevantes.
+        - Interpretar estatísticas, padrões e anomalias.
+        - Sintetizar os resultados em um resumo conciso.
         
-        Baseie suas análises nos dados previamente carregados e considere
-        o histórico de análises anteriores disponível na memória.
+        Se o **contexto** fornecido for relevante, integre-o à sua análise: {context}.
         
-        Forneça uma resposta clara e detalhada que responda diretamente
-        à pergunta do usuário, incluindo números, estatísticas e insights.
+        Seja direto e objetivo. Sua resposta final deve ser um insight claro e acionável,
+        baseado nos dados. Não se limite a listar estatísticas; explique o que elas significam.
         """,
         agent=agent,
-        expected_output="Análise detalhada que responde à pergunta específica do usuário com dados concretos e insights"
+        expected_output="""
+        Uma resposta clara e direta para a pergunta do usuário, contendo:
+        
+        - Os resultados numéricos ou estatísticos mais importantes.
+        - Pelo menos 2-3 insights relevantes extraídos da análise.
+        - Uma conclusão que sintetize as descobertas.
+        
+        A saída deve ser um texto formatado e fácil de ler.
+        """
     )
