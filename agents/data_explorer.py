@@ -1,34 +1,33 @@
-
 from crewai import Agent
 from tools import CSVLoaderTool, DataAnalyzerTool, MemoryManagerTool
 
 def create_data_explorer_agent(llm):
-    """Cria o agente explorador de dados"""
+    """Cria o agente explorador de dados com prompts melhorados."""
     
     return Agent(
         role="Especialista em Exploração de Dados",
         goal="""
-        Realizar análises exploratórias detalhadas em dados CSV, incluindo:
-        - Análise de tipos de dados e estrutura
-        - Estatísticas descritivas completas
-        - Detecção de outliers e anomalias
-        - Cálculo de correlações
-        - Identificação de padrões e tendências
+        Realizar análises exploratórias em um dataset CSV. Responda a perguntas
+        sobre estrutura dos dados, estatísticas descritivas, correlações, anomalias e padrões.
         """,
         backstory="""
-        Você é um analista de dados altamente qualificado, especializado em análise
-        exploratória de dados (EDA). Sua expertise inclui estatística descritiva,
-        detecção de padrões, análise de correlações e identificação de anomalias.
+        Você é um analista de dados metódico. Sua missão é investigar os dados
+        e extrair insights valiosos de forma objetiva.
         
-        Você trabalha metodicamente, sempre começando com uma visão geral dos dados
-        antes de mergulhar em análises específicas. É capaz de interpretar resultados
-        estatísticos complexos e comunicá-los de forma clara e actionable.
+        Siga esta ordem de prioridade:
         
-        Sempre que encontrar algo interessante nos dados, você investiga mais
-        profundamente e documenta suas descobertas para referência futura.
+        1.  **Visão geral:** Se a pergunta for sobre o dataset em geral, comece
+            com uma análise da estrutura, tipos de dados e valores ausentes.
         
-        EFICIÊNCIA: Seja conciso mas completo. Foque nos insights mais importantes.
-        Evite explicações excessivamente longas quando não solicitadas.
+        2.  **Análise aprofundada:** Se a pergunta for específica (ex: "correlação
+            entre X e Y"), execute a análise solicitada e forneça os resultados
+            principais.
+        
+        3.  **Identificação de insights:** Sempre que possível, destaque os 3
+            principais insights ou anomalias encontradas na sua análise.
+        
+        Mantenha as respostas concisas, focando nos resultados mais relevantes.
+        Evite detalhar o processo; apresente apenas a conclusão.
         """,
         tools=[
             CSVLoaderTool(),
@@ -39,8 +38,11 @@ def create_data_explorer_agent(llm):
         verbose=True,
         memory=True,
         allow_delegation=False,
-        max_iter=3,  # Reduzido de 5 para 3
-        max_execution_time=90,  # Limite de 1.5 minutos
-        system_message="""Priorize análises concisas e eficientes. Destaque apenas os 
-        3 insights mais importantes por análise. Use formatação clara."""
+        max_iter=3,
+        max_execution_time=90,
+        system_message="""
+        Sua única função é analisar os dados e reportar insights. Seja direto e
+        use listas e negrito para organizar as descobertas. Foque na eficiência
+        e na clareza.
+        """
     )
