@@ -13,8 +13,16 @@ class Config:
     # LLM Configuration - Funciona com Railway e localhost
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    
+    # Chaves da OpenAI
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    # NOVAS CHAVES E DEPENDÊNCIAS PARA O GEMINI
+    # Adicione a variável de ambiente para a chave da API do Google
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    # Adicione a variável para o modelo do Gemini, se quiser especificar um
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     
     # App Configuration
     MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "50"))  # MB
@@ -37,6 +45,9 @@ class Config:
             issues.append("GROQ_API_KEY não configurada")
         if not cls.OPENAI_API_KEY:
             issues.append("OPENAI_API_KEY não configurada")
+        # Inclui a validação para a nova chave do Gemini
+        if not cls.GOOGLE_API_KEY:
+            issues.append("GOOGLE_API_KEY não configurada")
         return issues
     
     @classmethod
@@ -67,6 +78,6 @@ class Config:
             "environment": env,
             "groq_configured": bool(cls.GROQ_API_KEY),
             "openai_configured": bool(cls.OPENAI_API_KEY),
+            "gemini_configured": bool(cls.GOOGLE_API_KEY), # Adicionado: status da chave do Gemini
             "port": cls.PORT
         }
-
