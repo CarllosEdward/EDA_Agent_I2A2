@@ -8,32 +8,23 @@ from pydantic import Field
 class DataAnalyzerTool(BaseTool):
     name: str = "Data Analyzer"
     description: str = """
-    Ferramenta para análise exploratória de dados CSV.
-    Executa análises estatísticas, detecta outliers, calcula correlações.
-    Aceita: DataFrame e tipo de análise desejada.
+    Ferramenta para análise exploratória de dados. Executa estatísticas descritivas,
+    detecta outliers, e calcula a matriz de correlação.
     """
 
-    def _run(self, analysis_request: str) -> str:
-        """
-        Executa análises nos dados
-        Args:
-            analysis_request: tipo de análise solicitada
-        """
-        try:
-            # Aqui assumimos que os dados estão em session_state do Streamlit
-            # No contexto real, receberemos o DataFrame através dos agentes
-            return self._perform_analysis(analysis_request)
-            
-        except Exception as e:
-            return f"Erro na análise: {str(e)}"
-    
-    def _perform_analysis(self, request: str) -> str:
-        """Executa diferentes tipos de análise"""
-        # Esta função será expandida pelos agentes
-        return f"Análise solicitada: {request}"
+    # O método _run é obsoleto e a chamada de métodos deve ser feita
+    # diretamente pelos agentes, conforme a nova arquitetura do CrewAI.
+    def _run(self, request: str) -> str:
+        return "A ferramenta 'DataAnalyzer' deve ser chamada diretamente com seus métodos específicos, como get_basic_stats(), detect_outliers() ou calculate_correlations()."
     
     def get_basic_stats(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Estatísticas básicas do dataset"""
+        """
+        Retorna um dicionário com estatísticas básicas do dataset.
+        
+        Isso inclui o formato (linhas e colunas), tipos de dados de cada coluna,
+        contagem de valores ausentes e estatísticas descritivas para as colunas numéricas.
+        É a base para a análise inicial de qualquer dataset.
+        """
         stats_info = {
             'shape': df.shape,
             'column_types': {
@@ -46,26 +37,33 @@ class DataAnalyzerTool(BaseTool):
             'duplicated_rows': df.duplicated().sum()
         }
         
-        # Estatísticas para colunas numéricas
+        # Apenas calcula estatísticas numéricas se houver colunas numéricas
         numeric_stats = {}
         for col in stats_info['column_types']['numeric']:
-            numeric_stats[col] = {
-                'mean': df[col].mean(),
-                'median': df[col].median(),
-                'std': df[col].std(),
-                'min': df[col].min(),
-                'max': df[col].max(),
-                'q25': df[col].quantile(0.25),
-                'q75': df[col].quantile(0.75),
-                'skewness': stats.skew(df[col].dropna()),
-                'kurtosis': stats.kurtosis(df[col].dropna())
-            }
+            if not df[col].empty:
+                numeric_stats[col] = {
+                    'mean': df[col].mean(),
+                    'median': df[col].median(),
+                    'std': df[col].std(),
+                    'min': df[col].min(),
+                    'max': df[col].max(),
+                    'q25': df[col].quantile(0.25),
+                    'q75': df[col].quantile(0.75),
+                    'skewness': stats.skew(df[col].dropna()) if df[col].dropna().shape[0] > 0 else np.nan,
+                    'kurtosis': stats.kurtosis(df[col].dropna()) if df[col].dropna().shape[0] > 0 else np.nan
+                }
         
         stats_info['numeric_stats'] = numeric_stats
         return stats_info
     
     def detect_outliers(self, df: pd.DataFrame, method: str = 'iqr') -> Dict[str, List]:
-        """Detecta outliers usando diferentes métodos"""
+        """
+        Detecta outliers em colunas numéricas usando o método IQR ou Z-score.
+        
+        Essa função é fundamental para a fase de pré-processamento,
+        ajudando a identificar valores atípicos que podem distorcer a análise estatística
+        e os resultados de modelos de machine learning.
+        """
         outliers = {}
         numeric_columns = df.select_dtypes(include=[np.number]).columns
         
@@ -79,13 +77,26 @@ class DataAnalyzerTool(BaseTool):
                 outliers[col] = df[(df[col] < lower_bound) | (df[col] > upper_bound)].index.tolist()
             
             elif method == 'zscore':
-                z_scores = np.abs(stats.zscore(df[col].dropna()))
-                threshold = 3
-                outliers[col] = df[z_scores > threshold].index.tolist()
+                # Evita erro em colunas vazias
+                if not df[col].dropna().empty:
+                    z_scores = np.abs(stats.zscore(df[col].dropna()))
+                    threshold = 3
+                    outliers[col] = df[z_scores > threshold].index.tolist()
+                else:
+                    outliers[col] = []
         
         return outliers
     
-    def calculate_correlations(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calcula matriz de correlação"""
+    def calculate_correlations(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
+        """
+        Calcula a matriz de correlação para todas as colunas numéricas.
+        
+        Essa matriz é essencial para entender a relação linear entre as variáveis,
+        sendo um passo importante na análise exploratória de dados.
+        Retorna None se não houver colunas numéricas suficientes.
+        """
         numeric_df = df.select_dtypes(include=[np.number])
+        if numeric_df.shape[1] < 2:
+            return None
+            
         return numeric_df.corr()
