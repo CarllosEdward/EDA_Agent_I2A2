@@ -25,7 +25,7 @@ class Config:
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     
     # App Configuration
-    MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "50"))  # MB
+    MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "128"))  # MB
     TEMP_DIR = os.getenv("TEMP_DIR", "temp_files")
     UPLOAD_DIR = f"{TEMP_DIR}/uploads"
     
