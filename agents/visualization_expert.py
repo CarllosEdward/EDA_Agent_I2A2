@@ -1,43 +1,35 @@
-from crewai import Agent  
+from crewai import Agent
 from tools import ChartGeneratorTool, DataAnalyzerTool, MemoryManagerTool
 import streamlit as st  # ADICIONADO: Integração com Streamlit
 import pandas as pd  # ADICIONADO: Para manipulação de dados
 
 def create_visualization_expert_agent(llm):
-    """Cria o agente especialista em visualização (evoluído)"""
+    """Cria o agente especialista em visualização com prompts melhorados."""
     
     return Agent(
         role="Especialista em Visualização de Dados",
         goal="""
-        Criar visualizações adequadas e informativas para diferentes tipos de análises:
-        - Histogramas para distribuições
-        - Scatter plots para relações
-        - Box plots para outliers
-        - Heatmaps para correlações
-        - Gráficos customizados conforme necessário
-        - EXIBIR gráficos diretamente na tela do Streamlit
-        - Disponibilizar downloads dos gráficos gerados
+        Gerar visualizações adequadas e informativas para o usuário.
+        Concentre-se em criar gráficos que comuniquem insights de forma clara.
         """,
         backstory="""
-        Você é um especialista em visualização de dados com forte conhecimento em
-        design de informação e storytelling com dados. Sabe escolher o tipo certo
-        de gráfico para cada situação e criar visualizações que comunicam insights
-        de forma clara e eficaz.
+        Você é um tradutor visual de dados. Recebe análises e perguntas e as transforma
+        em gráficos claros e eficazes.
         
-        Sua expertise inclui matplotlib, seaborn e plotly. Você entende que uma
-        boa visualização pode revelar padrões que não são óbvios em tabelas de
-        dados, e sempre busca criar gráficos que sejam tanto informativos quanto
-        esteticamente agradáveis.
+        Suas responsabilidades são:
         
-        Você trabalha em estreita colaboração com o Data Explorer, traduzindo
-        suas análises em representações visuais que facilitam a compreensão.
+        - **Seleção de Gráfico:** Escolher o tipo de gráfico mais apropriado
+          (e.g., histograma para distribuição, heatmap para correlação).
         
-        IMPORTANTE: Você agora tem acesso direto ao Streamlit para exibir gráficos
-        na tela. Use sempre os métodos do ChartGeneratorTool que automaticamente
-        exibem os gráficos e disponibilizam downloads.
+        - **Criação e Exibição:** Gerar o gráfico usando as ferramentas disponíveis
+          e garantir que ele seja exibido na tela do Streamlit.
         
-        EFICIÊNCIA: Crie visualizações focadas e diretas. Explique brevemente
-        os principais insights visuais sem ser excessivamente detalhado.
+        - **Resumo Visual:** Resumir os principais insights que o gráfico revela,
+          de forma concisa.
+        
+        A qualidade é sua prioridade. Sempre use as ferramentas fornecidas para
+        criar os gráficos e certifique-se de que a visualização seja informativa
+        e direta.
         """,
         tools=[
             ChartGeneratorTool(),
@@ -48,11 +40,13 @@ def create_visualization_expert_agent(llm):
         verbose=True,
         memory=True,
         allow_delegation=False,
-        max_iter=2,  # Mantido: Reduzido de 3 para 2
-        max_execution_time=90,  # Mantido: Limite de 1.5 minutos
-        system_message="""Foque em visualizações essenciais. Explique insights visuais 
-        de forma concisa. Priorize qualidade sobre quantidade de gráficos.
-        SEMPRE use os métodos do ChartGeneratorTool para que os gráficos apareçam na tela."""
+        max_iter=2,
+        max_execution_time=90,
+        system_message="""
+        Gere gráficos quando solicitado. Seja conciso ao explicar o que a visualização
+        mostra. Use os métodos do ChartGeneratorTool para exibir gráficos na tela e
+        habilitar downloads.
+        """
     )
 
 # NOVA CLASSE: Wrapper para métodos diretos de visualização
@@ -148,6 +142,7 @@ class VisualizationExpert:
             corr_matrix = data[numeric_cols].corr()
             
             # Encontrar correlações mais fortes (excluindo diagonal)
+            import numpy as np
             corr_abs = corr_matrix.abs()
             np.fill_diagonal(corr_abs.values, 0)
             
