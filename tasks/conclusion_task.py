@@ -1,36 +1,43 @@
 from crewai import Task
 
 def create_conclusion_task(agent, session_context: str = ""):
-    """Cria tarefa de conclusões finais"""
+    """Cria tarefa de conclusões finais com prompts melhorados."""
     
     return Task(
         description=f"""
-        Gerar conclusões consolidadas baseadas nas análises mais relevantes da sessão.
+        Sintetize as análises da sessão para criar um resumo executivo.
+        
+        Sua missão é extrair os insights mais importantes e as recomendações
+        mais valiosas, ignorando detalhes menores.
         
         Contexto da sessão: {session_context}
         
-        Suas responsabilidades CONCISAS incluem:
-        1. Identificar os TOP 3 insights mais importantes descobertos
-        2. Destacar apenas anomalias ou padrões CRÍTICOS
-        3. Resumir relações entre variáveis SIGNIFICATIVAS
-        4. Fornecer 2-3 recomendações práticas baseadas nos dados
+        Siga o formato abaixo, focando apenas no que é mais impactante:
         
-        IMPORTANTE: NÃO recupere TODAS as análises anteriores da memória. 
-        Foque apenas nos insights essenciais e mais impactantes.
+        - Identifique os 3 **principais insights** descobertos.
+        - Destaque **anomalias ou padrões críticos**.
+        - Crie 2 a 3 **recomendações práticas** baseadas nas descobertas.
         
-        FORMATO DE RESPOSTA (máximo 200 palavras):
-        📊 DATASET: [resumo breve]
-        💡 TOP 3 INSIGHTS:
-        • [Insight mais importante]
-        • [Segundo insight relevante]  
-        • [Terceiro insight significativo]
-        
-        🎯 RECOMENDAÇÕES: [2-3 ações práticas]
-        
-        Seja direto, objetivo e focado no valor para o usuário.
+        Seja conciso e direto. A resposta deve ser um relatório de alto nível,
+        sem a necessidade de recuperar toda a memória.
         """,
         agent=agent,
-        expected_output="Relatório executivo conciso (máximo 200 palavras) com os 3 principais insights e recomendações práticas",
-        max_execution_time=60,  # Limite de 1 minuto
+        expected_output="""
+        Um relatório executivo conciso, com o seguinte formato:
+        
+        ## 📊 Resumo Executivo da Análise
+        
+        ### 💡 Principais Insights
+        
+        - [Insight mais importante da sessão]
+        - [Segundo insight mais relevante]
+        - [Terceiro insight significativo]
+        
+        ### 🎯 Recomendações
+        
+        - [Recomendação prática 1]
+        - [Recomendação prática 2]
+        """,
+        max_execution_time=60,
         output_format="markdown"
     )
