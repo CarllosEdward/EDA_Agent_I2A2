@@ -1,106 +1,251 @@
+from crewai import Agent
+from tools import ChartGeneratorTool, DataAnalyzerTool, MemoryManagerTool
+import streamlit as st
 import pandas as pd
-import json
+
+def create_visualization_expert_agent(llm):
+    """Creates the Visualization Expert agent with a new, wizard-themed personality."""
+
+    return Agent(
+        role="Chart Conjurer",
+        goal="""
+        Conjure insightful and visually stunning charts from raw data.
+        Focus on creating visualizations that tell a clear and compelling story.
+        """,
+        backstory="""
+        You are a Chart Conjurer, a master of weaving data into beautiful and
+        informative visual spells. You receive analyses and questions and transform
+        them into clear, effective charts.
+
+        Your responsibilities are:
+        - **Chart Selection:** Choose the most appropriate chart type (e.g., histogram for distribution, heatmap for correlation).
+        - **Creation and Display:** Generate the chart using the available tools and ensure it is displayed correctly.
+        - **Visual Summary:** Summarize the key insights the chart reveals in a concise and magical way.
+
+        Quality is your priority. Always use the provided tools to create charts and ensure the visualization is both informative and enchanting.
+        """,
+        tools=[
+            ChartGeneratorTool(),
+            DataAnalyzerTool(),
+            MemoryManagerTool()
+        ],
+        llm=llm,
+        verbose=True,
+        memory=True,
+        allow_delegation=False,
+        max_iter=2,
+        max_execution_time=90,
+        system_message="""
+        Conjure charts when requested. Be concise when explaining what the visualization
+        shows. Use the ChartGeneratorTool methods to display charts and enable downloads.
+        """
+    )
 
 class VisualizationExpert:
     """
-    Generates visualization specifications in JSON format from a DataFrame.
+    Wrapper class for direct visualization methods.
     """
     
     def __init__(self, llm):
-        """
-        Initializes the visualization expert.
+        self.agent = create_visualization_expert_agent(llm)
+        self.chart_tool = ChartGeneratorTool()
 
-        Args:
-            llm: The language model to be used (currently not utilized,
-                 but kept for future integrations).
+    def create_survival_chart_direct(self, data: pd.DataFrame, user_question: str = "") -> str:
         """
-        self.llm = llm
+        Direct method to create a survival chart.
+        """
+        try:
+            st.info("🎨 Conjuring a survival chart...")
 
-    def _create_plot_spec(self, plot_type: str, data: pd.DataFrame, params: dict) -> str:
-        """
-        Creates a chart specification in JSON format.
-        """
-        spec = {
-            "plot_type": plot_type,
-            "data": data.to_dict(orient='records'),
-            "params": params
-        }
-        return json.dumps(spec)
+            if 'Sex' in data.columns and 'Survived' in data.columns:
+                result = self.chart_tool.create_survival_by_gender_chart(data)
 
-    def create_survival_chart(self, data: pd.DataFrame, user_question: str = "") -> str:
-        """
-        Generates a specification for a survival chart.
-        """
-        if 'Sex' in data.columns and 'Survived' in data.columns:
-            return self._create_plot_spec(
-                plot_type='bar',
-                data=data,
-                params={
-                    "x": "Sex",
-                    "y": "Survived",
-                    "color": "Survived",
-                    "title": "The Fates of Souls by Gender",
-                    "barmode": "group"
-                }
-            )
-        else:
-            return self.create_general_visualization(data)
+                total_passengers = len(data)
+                total_survivors = data['Survived'].sum()
+                survival_rate = (total_survivors / total_passengers * 100)
 
-    def create_correlation_chart(self, data: pd.DataFrame) -> str:
-        """
-        Generates a specification for a correlation matrix (heatmap).
-        """
-        numeric_cols = data.select_dtypes(include=['number']).columns
-        if len(numeric_cols) < 2:
-            return json.dumps({"error": "Dataset must have at least 2 numeric columns for correlation."})
+                analysis = f"""
+                **📊 The Fates of Souls: A Survival Analysis:**
 
-        corr_matrix = data[numeric_cols].corr().to_dict()
+                • **Total Souls on Board**: {total_passengers}
+                • **Souls who Survived**: {total_survivors}
+                • **Overall Survival Rate**: {survival_rate:.1f}%
 
-        return self._create_plot_spec(
-            plot_type='heatmap',
-            data=pd.DataFrame(corr_matrix),
-            params={
-                "title": "Nexus of Correlations",
-                "text_auto": True
-            }
-        )
+                **🔍 Insights by Gender:**
+                """
 
-    def create_distribution_chart(self, data: pd.DataFrame, column: str = None) -> str:
-        """
-        Generates a specification for a distribution histogram.
-        """
-        if column is None:
-            numeric_cols = data.select_dtypes(include=['number']).columns
-            if len(numeric_cols) > 0:
-                column = numeric_cols[0]
+                gender_analysis = data.groupby('Sex')['Survived'].agg(['count', 'sum', 'mean'])
+                for gender, stats in gender_analysis.iterrows():
+                    gender_pt = "Women" if gender == "female" else "Men"
+                    emoji = "👩" if gender == "female" else "👨"
+                    analysis += f"""
+                • {emoji} **{gender_pt}**: {stats['sum']}/{stats['count']} survived ({stats['mean']*100:.1f}%)"""
+
+                analysis += f"""
+
+                **✅ The charts above reveal:**
+                - A comparison of totals by gender
+                - The distribution of survivors vs. non-survivors
+                - Survival rate percentages
+
+                {result}
+                """
+
+                return analysis
+
             else:
-                return json.dumps({"error": "No numeric columns found."})
+                st.warning("⚠️ 'Sex' and 'Survived' columns not found. Conjuring a general analysis...")
+                if len(data.select_dtypes(include=['number']).columns) > 0:
+                    return self.create_general_visualization(data)
+                else:
+                    return "❌ The dataset lacks the necessary elements for a survival visualization."
 
-        if column not in data.columns:
-            return json.dumps({"error": f"Column '{column}' not found."})
+        except Exception as e:
+            error_msg = f"Error conjuring survival chart: {str(e)}"
+            st.error(error_msg)
+            return error_msg
 
-        return self._create_plot_spec(
-            plot_type='histogram',
-            data=data[[column]],
-            params={
-                "x": column,
-                "title": f"Distribution of {column}",
-                "marginal": "box"
-            }
-        )
+    def create_correlation_chart_direct(self, data: pd.DataFrame) -> str:
+        """
+        Direct method to create a correlation matrix.
+        """
+        try:
+            st.info("🎨 Conjuring a correlation matrix...")
+
+            numeric_cols = data.select_dtypes(include=['number']).columns
+            if len(numeric_cols) < 2:
+                msg = "⚠️ The dataset has fewer than 2 numeric columns for a correlation analysis."
+                st.warning(msg)
+                return msg
+
+            result = self.chart_tool.create_correlation_heatmap(data)
+
+            corr_matrix = data[numeric_cols].corr()
+
+            import numpy as np
+            corr_abs = corr_matrix.abs()
+            np.fill_diagonal(corr_abs.values, 0)
+
+            if not corr_abs.empty and corr_abs.max().max() > 0:
+                max_corr = corr_abs.max().max()
+                max_corr_idx = corr_abs.stack().idxmax()
+                actual_corr = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
+
+                analysis = f"""
+                **📊 Nexus of Correlations:**
+
+                • **Columns Analyzed**: {len(numeric_cols)} numeric variables
+                • **Strongest Correlation**: {max_corr_idx[0]} ↔ {max_corr_idx[1]} ({actual_corr:.3f})
+
+                **🔍 Interpretation:**
+                • Values near +1: Strong positive correlation
+                • Values near -1: Strong negative correlation
+                • Values near 0: Little to no correlation
+
+                **✅ The heatmap above shows all correlations between the numeric variables.**
+
+                {result}
+                """
+            else:
+                analysis = f"""
+                **📊 Correlation Matrix Generated:**
+
+                • **Columns Analyzed**: {len(numeric_cols)} numeric variables
+                • **Correlations**: Visualized in the heatmap above
+
+                {result}
+                """
+
+            return analysis
+
+        except Exception as e:
+            error_msg = f"Error conjuring correlation matrix: {str(e)}"
+            st.error(error_msg)
+            return error_msg
+
+    def create_distribution_chart_direct(self, data: pd.DataFrame, column: str = None) -> str:
+        """
+        Direct method to create a distribution chart.
+        """
+        try:
+            if column is None:
+                numeric_cols = data.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    column = numeric_cols[0]
+                else:
+                    msg = "❌ No numeric columns found for distribution analysis."
+                    st.warning(msg)
+                    return msg
+
+            if column not in data.columns:
+                msg = f"❌ Column '{column}' not found in the dataset."
+                st.error(msg)
+                return msg
+
+            st.info(f"🎨 Conjuring a distribution chart for '{column}'...")
+
+            result = self.chart_tool.create_histogram(data, column)
+
+            stats = data[column].describe()
+            null_count = data[column].isnull().sum()
+
+            analysis = f"""
+            **📊 Distribution Analysis - {column}:**
+
+            **📈 Descriptive Statistics:**
+            • Mean: {stats['mean']:.2f}
+            • Median (50%): {stats['50%']:.2f}
+            • Std. Deviation: {stats['std']:.2f}
+            • Min: {stats['min']:.2f}
+            • Max: {stats['max']:.2f}
+            • Missing Values: {null_count}
+
+            **✅ The histogram above shows the distribution of the {column} variable.**
+
+            {result}
+            """
+
+            return analysis
+
+        except Exception as e:
+            error_msg = f"Error conjuring distribution chart: {str(e)}"
+            st.error(error_msg)
+            return error_msg
 
     def create_general_visualization(self, data: pd.DataFrame) -> str:
         """
-        Generates a specification for a general visualization (e.g., pairplot).
+        Creates a general visualization based on the dataset's structure.
         """
-        numeric_cols = data.select_dtypes(include=['number']).columns
-        if len(numeric_cols) < 2:
-            return json.dumps({"error": "General visualization requires at least 2 numeric columns."})
+        try:
+            st.info("🎨 Conjuring general visualizations for the dataset...")
 
-        return self._create_plot_spec(
-            plot_type='pairplot',
-            data=data,
-            params={
-                "title": "Constellation of Variable Relationships"
-            }
-        )
+            results = []
+
+            numeric_cols = data.select_dtypes(include=['number']).columns
+            if len(numeric_cols) >= 2:
+                self.create_correlation_chart_direct(data)
+                results.append("🔗 **Correlation Matrix conjured**")
+
+            if len(numeric_cols) > 0:
+                first_numeric = numeric_cols[0]
+                self.create_distribution_chart_direct(data, first_numeric)
+                results.append(f"📊 **Distribution of {first_numeric} conjured**")
+
+            general_info = f"""
+            **📋 General Dataset Information:**
+
+            • **Dimensions**: {data.shape[0]} rows × {data.shape[1]} columns
+            • **Numeric Columns**: {len(numeric_cols)}
+            • **Categorical Columns**: {len(data.select_dtypes(include=['object']).columns)}
+            • **Missing Values**: {data.isnull().sum().sum()}
+
+            **✅ Visualizations conjured:**
+            {chr(10).join(results)}
+            """
+
+            return general_info
+
+        except Exception as e:
+            error_msg = f"Error conjuring general visualization: {str(e)}"
+            st.error(error_msg)
+            return error_msg
