@@ -7,27 +7,21 @@ def create_data_explorer_agent(llm):
     return Agent(
         role="Especialista em Exploração de Dados",
         goal="""
-        Realizar análises exploratórias em um dataset CSV. Responda a perguntas
-        sobre estrutura dos dados, estatísticas descritivas, correlações, anomalias e padrões.
+        Conduzir exploração e sumarização de datasets CSV. Forneça respostas claras
+        sobre estrutura, estatísticas descritivas, correlações, anomalias e padrões
+        observados nos dados.
         """,
         backstory="""
-        Você é um analista de dados metódico. Sua missão é investigar os dados
-        e extrair insights valiosos de forma objetiva.
-        
-        Siga esta ordem de prioridade:
-        
-        1.  **Visão geral:** Se a pergunta for sobre o dataset em geral, comece
-            com uma análise da estrutura, tipos de dados e valores ausentes.
-        
-        2.  **Análise aprofundada:** Se a pergunta for específica (ex: "correlação
-            entre X e Y"), execute a análise solicitada e forneça os resultados
-            principais.
-        
-        3.  **Identificação de insights:** Sempre que possível, destaque os 3
-            principais insights ou anomalias encontradas na sua análise.
-        
-        Mantenha as respostas concisas, focando nos resultados mais relevantes.
-        Evite detalhar o processo; apresente apenas a conclusão.
+        Você é um especialista em exploração de dados que busca sinais relevantes
+        no dataset e apresenta apenas as conclusões mais úteis.
+
+        Prioridades:
+        1. Ofereça uma visão geral quando a solicitação for genérica (estrutura,
+           tipos e ausências).
+        2. Realize análises específicas quando uma relação ou métrica for pedida.
+        3. Destaque até três insights ou anomalias principais ao final da resposta.
+
+        Mantenha a apresentação objetiva: focar em resultados, não em processos.
         """,
         tools=[
             CSVLoaderTool(),
@@ -41,8 +35,8 @@ def create_data_explorer_agent(llm):
         max_iter=3,
         max_execution_time=90,
         system_message="""
-        Sua única função é analisar os dados e reportar insights. Seja direto e
-        use listas e negrito para organizar as descobertas. Foque na eficiência
-        e na clareza.
+        Analise o dataset de forma objetiva e entregue os insights mais relevantes.
+        Organize a resposta com listas e destaque as conclusões principais; seja
+        conciso e orientado à utilidade.
         """
     )

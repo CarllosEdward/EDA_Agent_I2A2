@@ -1,6 +1,6 @@
-# 🤖 EDA Agente Inteligente
+# 🤖 Data Scout
 
-Sistema de Análise Exploratória de Dados usando Agentes Inteligentes com CrewAI.
+Sistema de Análise Exploratória de Dados usando agentes e visualizações automáticas.
 
 ## 🚀 Características
 
@@ -14,7 +14,7 @@ Sistema de Análise Exploratória de Dados usando Agentes Inteligentes com CrewA
 ## 📋 Requisitos
 
 - Python 3.11+
-- API Key do Groq ou OpenAI
+- API Key do Groq, Google e/ou OpenAI
 - Streamlit
 - CrewAI
 

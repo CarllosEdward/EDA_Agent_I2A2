@@ -22,7 +22,7 @@ class Config:
     # Adicione a variável de ambiente para a chave da API do Google
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     # Adicione a variável para o modelo do Gemini, se quiser especificar um
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     # App Configuration
     MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "128"))  # MB
@@ -33,7 +33,7 @@ class Config:
     PORT = int(os.getenv("PORT", "8501"))  # Railway define PORT automaticamente
     
     # Streamlit Configuration
-    PAGE_TITLE = "EDA Agente Inteligente"
+    PAGE_TITLE = "Data Scout"
     PAGE_ICON = "🤖"
     LAYOUT = "wide"
     

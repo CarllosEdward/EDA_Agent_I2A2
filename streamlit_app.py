@@ -14,68 +14,105 @@ from main import EDACrewSystem
 
 # Configuração da página
 st.set_page_config(
-    page_title="EDA Agente Inteligente",
-    page_icon="🤖",
+    page_title="Data Scout",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS customizado
+# Tema escuro e CSS customizado (fontes e cores)
 st.markdown("""
 <style>
-    .main-header {
-        text-align: center;
-        padding: 2rem 0;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-    }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-        border-left: 4px solid #667eea;
-        background-color: #f0f2f6;
-    }
-    .agent-response {
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-        border-left: 4px solid #28a745;
-        background-color: #d4edda;
-    }
-    .warning-box {
-        padding: 1rem;
-        border-radius: 10px;
-        background-color: #fff3cd;
-        border: 1px solid #ffeaa7;
-        margin: 1rem 0;
-    }
-    .success-box {
-        padding: 1rem;
-        border-radius: 10px;
-        background-color: #d1edff;
-        border: 1px solid #0066cc;
-        margin: 1rem 0;
-    }
-    .dataset-info {
-        padding: 1rem;
-        border-radius: 10px;
-        background-color: #e8f4fd;
-        border: 1px solid #0066cc;
-        margin: 1rem 0;
-    }
-    .stButton > button {
-        width: 100%;
-        margin: 0.25rem 0;
-    }
-    .copy-button {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1000;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+:root{
+  --bg:#0f1720; /* fundo principal */
+  --panel:#0b1220; /* fundos de cards/painéis */
+  --muted:#93a3b8; /* texto secundário */
+  --accent:#7c5cff; /* cor de destaque */
+  --accent-2:#00c2a8; /* cor secundária */
+  --glass: rgba(255,255,255,0.03);
+  --card-border: rgba(255,255,255,0.04);
+}
+
+html, body, [class*="css"]  {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    background-color: var(--bg) !important;
+    color: #e6eef8 !important;
+}
+
+/* Cabeçalho principal */
+.main-header {
+    text-align: center;
+    padding: 1.5rem 0.75rem;
+    background: linear-gradient(90deg, rgba(124,92,255,0.12), rgba(0,194,168,0.08));
+    color: #ffffff;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--card-border);
+}
+
+.chat-message {
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 0.75rem 0;
+    border-left: 4px solid var(--accent);
+    background-color: var(--panel);
+}
+.agent-response {
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 0.75rem 0;
+    border-left: 4px solid var(--accent-2);
+    background-color: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+}
+
+.warning-box { background-color: rgba(255,138,0,0.08); border: 1px solid rgba(255,138,0,0.18); padding: 0.85rem; border-radius:8px; }
+.success-box { background-color: rgba(40,167,69,0.06); border: 1px solid rgba(40,167,69,0.12); padding: 0.85rem; border-radius:8px; }
+.dataset-info { background-color: var(--panel); border: 1px solid var(--card-border); padding: 0.85rem; border-radius:8px; }
+
+/* Botões maiores e com destaque */
+.stButton > button {
+    width: 100%;
+    margin: 0.25rem 0;
+    background: linear-gradient(90deg, var(--accent), #5b3bfc) !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: 0 6px 18px rgba(124,92,255,0.08);
+}
+
+/* Sidebar escura */
+.css-1d391kg .stSidebar, .css-1oeo5b2.e1fqkh3o3 { background-color: #071018 !important; border-right: 1px solid rgba(255,255,255,0.03); }
+
+/* Pequenos ajustes visuais */
+.stTextInput > div > input, .stTextArea > div > textarea { background-color: #071018; color: #e6eef8; border: 1px solid rgba(255,255,255,0.04); }
+.stMetric { background: var(--panel); border: 1px solid var(--card-border); }
+.stCaption { color: var(--muted) !important; }
+
+.copy-button { position: absolute; top: 6px; right: 6px; z-index: 1000; }
+
+/* Forçar contraste em plotly hover */
+.js-plotly-plot .plotly { background: transparent !important; }
+
+</style>
+""", unsafe_allow_html=True)
+
+# Forçar template escuro no plotly
+try:
+    px.defaults.template = 'plotly_dark'
+except Exception:
+    pass
+
+# Reforçar backgrounds principais do Streamlit (containers)
+st.markdown("""
+<style>
+/* bloco principal */
+.css-18e3th9 { background-color: var(--bg) !important; }
+.block-container { background-color: transparent !important; }
+.stApp { background-color: var(--bg) !important; }
+
+/* Tabelas e dataframes */
+.stDataFrame > div[data-testid="stMarkdownContainer"] table { background-color: #071018 !important; color: #e6eef8 !important; }
+.stDataFrame table th, .stDataFrame table td { border-color: rgba(255,255,255,0.04) !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,9 +143,14 @@ def handle_rate_limit_error(error_msg: str, provider: str):
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Reduzir Tokens", key="reduce_tokens"):
+                # Ajustar tokens de forma conservadora dependendo do provedor
                 if provider == "groq":
-                    st.session_state.tokens_slider = 200
-                    st.rerun()
+                    # Groq costuma precisar de limites mais baixos para evitar rate limits
+                    st.session_state.max_tokens_groq = 200
+                elif provider == "gemini":
+                    # Gemini é geralmente mais permissivo; reduzir para um valor intermediário
+                    st.session_state.max_tokens_gemini = 512
+                st.rerun()
         with col2:
             if st.button("Mudar OpenAI", key="switch_openai"):
                 st.session_state.llm_provider_select = "openai"
@@ -129,10 +171,10 @@ def add_visualization_sidebar():
             data = eda_system.current_dataset
             
             st.sidebar.markdown("---")
-            st.sidebar.markdown("### 📊 Visualizações Rápidas")
+            st.sidebar.markdown("### Visualizações Rápidas")
             
             # Botão principal para gerar todas as visualizações
-            if st.sidebar.button("🎯 Gerar Todas as Visualizações", key="viz_all_sidebar"):
+            if st.sidebar.button("Gerar Todas as Visualizações", key="viz_all_sidebar"):
                 # Simular input do usuário para processar visualizações
                 question = "visualizações completas do dataset"
                 
@@ -140,26 +182,26 @@ def add_visualization_sidebar():
                 process_user_question(question)
                 
                 # Mostrar mensagem de sucesso
-                st.sidebar.success("✅ Visualizações geradas!")
+                st.sidebar.success("Visualizações geradas!")
             
             # Botões para gráficos específicos
             st.sidebar.markdown("**Gráficos Específicos:**")
             
-            if st.sidebar.button("📈 Matriz Correlação", key="viz_corr"):
+            if st.sidebar.button("Matriz Correlação", key="viz_corr"):
                 process_user_question("gera matriz de correlação")
-                st.sidebar.success("✅ Matriz gerada!")
+                st.sidebar.success("Matriz gerada!")
             
-            if st.sidebar.button("📊 Distribuições", key="viz_dist"):
+            if st.sidebar.button("Distribuições", key="viz_dist"):
                 process_user_question("mostra distribuições das variáveis")
-                st.sidebar.success("✅ Distribuições geradas!")
+                st.sidebar.success("Distribuições geradas!")
             
-            if st.sidebar.button("🎯 Scatter Plots", key="viz_scatter"):
+            if st.sidebar.button("Scatter Plots", key="viz_scatter"):
                 process_user_question("cria scatter plots entre variáveis")
-                st.sidebar.success("✅ Scatter plots gerados!")
+                st.sidebar.success("Scatter plots gerados!")
             
             # Informações do dataset
             st.sidebar.markdown("---")
-            st.sidebar.markdown("### 📋 Info do Dataset")
+            st.sidebar.markdown("### Info do Dataset")
             
             # Métricas básicas
             col1, col2 = st.sidebar.columns(2)
@@ -191,25 +233,25 @@ def add_visualization_sidebar():
             
             # Status de qualidade dos dados
             st.sidebar.markdown("---")
-            st.sidebar.markdown("### ⚡ Qualidade dos Dados")
+            st.sidebar.markdown("### Qualidade dos Dados")
             
             # Verificar valores nulos
             null_count = data.isnull().sum().sum()
             if null_count > 0:
-                st.sidebar.warning(f"⚠️ {null_count} valores nulos")
+                st.sidebar.warning(f"{null_count} valores nulos")
             else:
-                st.sidebar.success("✅ Sem valores nulos")
+                st.sidebar.success("Sem valores nulos")
             
             # Verificar duplicatas
             dup_count = data.duplicated().sum()
             if dup_count > 0:
-                st.sidebar.warning(f"⚠️ {dup_count} linhas duplicadas")
+                st.sidebar.warning(f"{dup_count} linhas duplicadas")
             else:
-                st.sidebar.success("✅ Sem duplicatas")
+                st.sidebar.success("Sem duplicatas")
             
             # Tamanho do dataset
             memory_usage = data.memory_usage(deep=True).sum() / 1024 / 1024  # MB
-            st.sidebar.info(f"💾 Tamanho: {memory_usage:.1f} MB")
+            st.sidebar.info(f"Tamanho: {memory_usage:.1f} MB")
 
 def setup_sidebar():
     """Configura a barra lateral"""
@@ -217,8 +259,8 @@ def setup_sidebar():
     
     llm_provider = st.sidebar.selectbox(
         "Provedor LLM:",
-        ["openai", "groq"],
-        help="OpenAI é mais estável. Groq é rápido mas tem rate limits",
+        ["openai", "groq", "gemini"],
+        help="OpenAI é estável. Groq e Gemini são alternativas; Groq tem rate limits",
         key="llm_provider_select"
     )
     
@@ -228,6 +270,11 @@ def setup_sidebar():
             "llama-3.1-8b-instant",
             "openai/gpt-oss-120b",
             "qwen/qwen3-32b"
+        ],
+        "gemini": [
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite"
         ],
         "openai": [
             "gpt-4o-mini",
@@ -244,9 +291,9 @@ def setup_sidebar():
         key="model_select"
     )
     
+    # Configurações por provedor
     if llm_provider == "groq":
         st.sidebar.warning("Groq: Rate limits severos")
-        
         max_tokens = st.sidebar.slider(
             "Limite Tokens:",
             min_value=100,
@@ -255,26 +302,47 @@ def setup_sidebar():
             step=50,
             key="tokens_slider"
         )
-        
         st.session_state.max_tokens_groq = max_tokens
+    elif llm_provider == "gemini":
+        st.sidebar.info("Gemini: Alternativa ao OpenAI - ajuste tokens conforme necessário")
+        max_tokens = st.sidebar.slider(
+            "Limite Tokens (Gemini):",
+            min_value=100,
+            max_value=4000,
+            value=1024,
+            step=128,
+            key="tokens_slider_gemini"
+        )
+        st.session_state.max_tokens_gemini = max_tokens
     else:
         st.sidebar.success("OpenAI: Mais estável")
         max_tokens = 1500
     
-    # Status das API Keys
+    # Status das API Keys (exibir cada chave individualmente)
     st.sidebar.subheader("Status das Chaves")
-    issues = Config.validate_keys()
-    if issues:
-        for issue in issues:
-            st.sidebar.error(f"❌ {issue}")
+    status = Config.get_status()
+
+    # Mostrar cada chave com ícone
+    if status.get('groq_configured'):
+        st.sidebar.markdown("GROQ_API_KEY configurada")
     else:
-        st.sidebar.success("✅ Chaves configuradas")
+        st.sidebar.markdown("GROQ_API_KEY nao configurada")
+
+    if status.get('openai_configured'):
+        st.sidebar.markdown("OPENAI_API_KEY configurada")
+    else:
+        st.sidebar.markdown("OPENAI_API_KEY nao configurada")
+
+    if status.get('gemini_configured'):
+        st.sidebar.markdown("GEMINI/GOOGLE_API_KEY configurada")
+    else:
+        st.sidebar.markdown("GEMINI/GOOGLE_API_KEY nao configurada")
     
     return llm_provider, model_name, max_tokens
 
 def load_dataset_section():
     """Seção de carregamento de dataset"""
-    st.header("Carregamento de Dataset CSV")
+    st.header("Carregue seu arquivo em formato CSV")
     
     tab1, tab2, tab3 = st.tabs(["Upload Local", "URL Direta", "Exemplos"])
     
@@ -656,7 +724,7 @@ def process_user_question(question: str):
     
     if is_viz_request:
         # PROCESSAMENTO DE VISUALIZAÇÕES
-        st.markdown("## 📊 GRÁFICOS GERADOS")
+        st.markdown("## GRAFICOS GERADOS")
         
         try:
             # Acessar dados diretamente
@@ -664,7 +732,7 @@ def process_user_question(question: str):
             data = eda_system.current_dataset
             dataset_name = eda_system.dataset_info.get('name', 'Dataset')
             
-            st.success(f"✅ Gerando gráficos para: {dataset_name}")
+            st.success(f"Gerando graficos para: {dataset_name}")
             
             # Preparar contadores para keys únicos
             chart_counter = len(st.session_state.chat_history)
@@ -676,7 +744,7 @@ def process_user_question(question: str):
             charts_generated = []
             
             # 1. INFORMAÇÕES GERAIS DO DATASET
-            st.markdown("### 📋 Resumo do Dataset")
+            st.markdown("### Resumo do Dataset")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -690,7 +758,7 @@ def process_user_question(question: str):
             
             # 2. MATRIZ DE CORRELAÇÃO
             if len(numeric_cols) >= 2:
-                st.markdown("### 🔗 Matriz de Correlação")
+                st.markdown("### Matriz de Correlacao")
                 
                 corr_matrix = data[numeric_cols].corr()
                 fig_corr = px.imshow(
@@ -717,13 +785,13 @@ def process_user_question(question: str):
             
             # 3. DISTRIBUIÇÕES DAS VARIÁVEIS NUMÉRICAS
             if len(numeric_cols) > 0:
-                st.markdown("### 📊 Distribuições das Variáveis Numéricas")
+                st.markdown("### Distribuicoes das Variaveis Numericas")
                 
                 # Mostrar até 4 distribuições em 2 colunas
                 num_plots = min(len(numeric_cols), 4)
                 
                 for i, col in enumerate(numeric_cols[:num_plots]):
-                    st.markdown(f"**Distribuição de {col}:**")
+                    st.markdown(f"**Distribuicao de {col}:**")
                     
                     # Histograma com marginal box plot
                     fig_hist = px.histogram(
@@ -744,7 +812,7 @@ def process_user_question(question: str):
             
             # 4. RELAÇÕES ENTRE VARIÁVEIS NUMÉRICAS
             if len(numeric_cols) >= 2:
-                st.markdown("### 🎯 Relações entre Variáveis")
+                st.markdown("### Relacoes entre Variaveis")
                 
                 # Scatter plot das duas primeiras variáveis
                 x_var = numeric_cols[0]
@@ -783,7 +851,7 @@ def process_user_question(question: str):
             
             # 5. ANÁLISE POR CATEGORIAS (específico para dados como Titanic)
             if len(categorical_cols) > 0 and len(numeric_cols) > 0:
-                st.markdown("### 📈 Análise por Categorias")
+                st.markdown("### Analise por Categorias")
                 
                 # Procurar colunas de sobrevivência e gênero
                 survival_cols = [col for col in categorical_cols if any(word in col.lower() 
@@ -832,17 +900,17 @@ def process_user_question(question: str):
                         charts_generated.append(f"Box plot {num_var} por {cat_var}")
             
             # 6. AMOSTRA DOS DADOS
-            st.markdown("### 🔍 Amostra dos Dados")
+            st.markdown("### Amostra dos Dados")
             st.dataframe(data.head(10), use_container_width=True)
             
             # 7. ESTATÍSTICAS DESCRITIVAS
             if len(numeric_cols) > 0:
-                st.markdown("### 📈 Estatísticas Descritivas")
+                st.markdown("### Estatisticas Descritivas")
                 desc_stats = data[numeric_cols].describe()
                 st.dataframe(desc_stats, use_container_width=True)
             
             # RESPOSTA CONSOLIDADA
-            result = f"""✅ **GRÁFICOS EXIBIDOS COM SUCESSO!**
+            result = f"""**GRAFICOS EXIBIDOS COM SUCESSO!**
 
 **Dataset analisado:** {dataset_name}
 • Dimensões: {data.shape[0]} linhas × {data.shape[1]} colunas
@@ -862,7 +930,7 @@ def process_user_question(question: str):
     
     else:
         # PROCESSAMENTO DE PERGUNTAS NORMAIS
-        with st.spinner("🤖 Analisando sua pergunta..."):
+        with st.spinner("Analisando sua pergunta..."):
             try:
                 # Usar o sistema CrewAI para perguntas normais
                 result = st.session_state.eda_system.analyze_question(question)
@@ -872,8 +940,15 @@ def process_user_question(question: str):
                       ['rate limit', 'erro', 'error', 'exception']):
                     
                     current_config = st.session_state.get('current_config', '')
+                    # Detectar provedor atual (suporta groq ou gemini)
+                    provider = None
                     if 'groq' in current_config:
-                        if not handle_rate_limit_error(result, 'groq'):
+                        provider = 'groq'
+                    elif 'gemini' in current_config:
+                        provider = 'gemini'
+
+                    if provider:
+                        if not handle_rate_limit_error(result, provider):
                             st.error("Erro na análise da pergunta")
                         return  # Sair sem adicionar ao histórico se há erro
                     else:
@@ -883,9 +958,16 @@ def process_user_question(question: str):
             except Exception as e:
                 error_msg = str(e)
                 current_config = st.session_state.get('current_config', '')
-                
-                if 'groq' in current_config and 'rate' in error_msg.lower():
-                    if not handle_rate_limit_error(error_msg, 'groq'):
+
+                # Detectar provedor atual (suporta groq ou gemini)
+                provider = None
+                if 'groq' in current_config:
+                    provider = 'groq'
+                elif 'gemini' in current_config:
+                    provider = 'gemini'
+
+                if provider and 'rate' in error_msg.lower():
+                    if not handle_rate_limit_error(error_msg, provider):
                         st.error(f"Erro técnico: {error_msg}")
                 else:
                     st.error(f"Erro ao processar pergunta: {error_msg}")
@@ -903,12 +985,12 @@ def process_user_question(question: str):
     if is_viz_request:
         # Para visualizações, a resposta já foi mostrada acima
         st.markdown("---")
-        st.success("✅ Visualizações geradas com sucesso! Veja os gráficos acima.")
+        st.success("Visualizacoes geradas com sucesso! Veja os graficos acima.")
     else:
         # Para perguntas normais, mostrar a resposta
         st.markdown(f"""
         <div class="agent-response">
-        <strong>🤖 Resposta do Agente:</strong><br>
+        <strong>Resposta do Agente:</strong><br>
         {result}
         </div>
         """, unsafe_allow_html=True)
@@ -948,7 +1030,7 @@ def finalize_session():
     st.markdown("""
     <div class="success-box">
     <h3>Sessão Finalizada com Sucesso!</h3>
-    <p><strong>Obrigado por usar o EDA Agente Inteligente!</strong></p>
+    <p><strong>Obrigado por usar o Data Scout!</strong></p>
     <p>Sua análise exploratória foi concluída.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1028,12 +1110,12 @@ def restart_session_to_upload():
 
 def main():
     """Função principal da aplicação"""
-    # Cabeçalho principal
+    # Cabeçalho principal (texto atualizado para versão criativa em PT-BR)
     st.markdown("""
     <div class="main-header">
-        <h1>EDA Agente Inteligente</h1>
-        <p>Análise Exploratória de Dados CSV com Agentes CrewAI</p>
-        <small>Funciona com qualquer CSV • Localhost & Railway</small>
+        <h1>Explorador de Dados Automático</h1>
+        <p>Transforme qualquer CSV em insights — gráficos interativos, resumos e conclusões em segundos.</p>
+        <small>Rápido • Interativo • Pronto para produção (Localhost / Railway)</small>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1062,6 +1144,7 @@ def main():
            ```
            GROQ_API_KEY=gsk_sua_chave_groq_aqui
            OPENAI_API_KEY=sk_sua_chave_openai_aqui
+           GEMINI_API_KEY=your_gemini_api_key_here
            ```
         3. **Reinicie a aplicação**
         """)
@@ -1106,8 +1189,8 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #666; padding: 1rem;">
-        <strong>EDA Agente Inteligente</strong> | 
-        Powered by <strong>CrewAI</strong> • <strong>Streamlit</strong> • <strong>Groq</strong>/<strong>OpenAI</strong><br>
+    <strong>Data Scout</strong> | 
+    Powered by <strong>CrewAI</strong> • <strong>Streamlit</strong> • <strong>Groq</strong>/<strong>OpenAI</strong>/<strong>Gemini</strong><br>
         <small><strong>Sistema Universal:</strong> Analisa qualquer arquivo CSV com visualizações automáticas</small>
     </div>
     """, unsafe_allow_html=True)

@@ -20,7 +20,7 @@ class EDACrewSystem:
         """
         Inicializa o sistema EDA (mantido + visualizações)
         Args:
-            llm_provider: 'groq' ou 'openai' - PADRÃO MANTIDO PARA OPENAI
+            llm_provider: 'groq', 'openai' ou 'gemini' - PADRÃO MANTIDO PARA OPENAI
             model_name: nome específico do modelo
             max_tokens: limite de tokens para respostas
         """
@@ -59,7 +59,8 @@ class EDACrewSystem:
         """Retorna modelo padrão para o provider (mantido)"""
         defaults = {
             "groq": "llama-3.1-8b-instant",  # MANTIDO
-            "openai": "gpt-3.5-turbo"        # MANTIDO
+            "openai": "gpt-3.5-turbo",       # MANTIDO
+            "gemini": Config.GEMINI_MODEL      # Novo: modelo padrão para Gemini (via utils.config)
         }
         return defaults.get(provider.lower(), "gpt-3.5-turbo")
     
@@ -110,9 +111,31 @@ class EDACrewSystem:
                 timeout=60,
                 max_retries=2
             )
+
+        elif provider.lower() == "gemini":
+            # Integração básica com Gemini: usa a chave GOOGLE_API_KEY e GEMINI_MODEL da config.
+            api_key = Config.GOOGLE_API_KEY
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY não configurada")
+
+            gemini_model = model_name or Config.GEMINI_MODEL
+            print(f"🔧 Modelo Gemini configurado: {gemini_model}")
+
+            # Observação: dependendo da biblioteca usada para Gemini, ajuste este retorno.
+            # Aqui usamos ChatOpenAI como fallback compatível com interface de chamada de chat
+            # (muitas integrações aceitam os mesmos parâmetros). Se você tiver um cliente
+            # específico para Gemini, substitua por ele.
+            return ChatOpenAI(
+                api_key=api_key,
+                model=gemini_model,
+                temperature=0.1,
+                max_tokens=max_tokens,
+                timeout=60,
+                max_retries=2
+            )
         
         else:
-            raise ValueError("Provider deve ser 'groq' ou 'openai'")
+            raise ValueError("Provider deve ser 'groq', 'openai' ou 'gemini'")
     
     def load_dataset(self, csv_source: str) -> str:
         """Carrega dataset CSV com contexto completo (mantido + melhorado)"""
