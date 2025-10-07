@@ -72,7 +72,7 @@ class CoordenadorInteligente:
                 analysis_task = Task(
                     description=f"Analyze the dataset to answer the following question: '{user_question}'. The data has columns: {', '.join(data.columns)}.",
                     agent=data_explorer_agent,
-                    expected_output="A concise, text-based answer to the user's question."
+                    expected_output="A mystical and insightful revelation, presented as a concise, text-based answer to the user's question."
                 )
 
                 crew = Crew(

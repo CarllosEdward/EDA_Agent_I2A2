@@ -17,61 +17,61 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS customizado
+# Dark Theme CSS
 st.markdown("""
 <style>
+    body {
+        color: #f0f2f6;
+        background-color: #0e1117;
+    }
     .main-header {
         text-align: center;
         padding: 2rem 0;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: linear-gradient(90deg, #3a3a3a 0%, #2a2a2a 100%);
+        color: #f0f2f6;
         border-radius: 10px;
         margin-bottom: 2rem;
+        border: 1px solid #4a4a4a;
     }
     .chat-message {
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
-        border-left: 4px solid #667eea;
-        background-color: #f0f2f6;
+        border-left: 4px solid #7b68ee;
+        background-color: #262730;
     }
     .agent-response {
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
         border-left: 4px solid #28a745;
-        background-color: #d4edda;
+        background-color: #1e2a24;
     }
     .warning-box {
         padding: 1rem;
         border-radius: 10px;
-        background-color: #fff3cd;
-        border: 1px solid #ffeaa7;
+        background-color: #3b310a;
+        border: 1px solid #a78d4f;
         margin: 1rem 0;
     }
     .success-box {
         padding: 1rem;
         border-radius: 10px;
-        background-color: #d1edff;
-        border: 1px solid #0066cc;
+        background-color: #1c3344;
+        border: 1px solid #3d85c6;
         margin: 1rem 0;
     }
     .dataset-info {
         padding: 1rem;
         border-radius: 10px;
-        background-color: #e8f4fd;
-        border: 1px solid #0066cc;
+        background-color: #2a2a3a;
+        border: 1px solid #4a4a5a;
         margin: 1rem 0;
     }
     .stButton > button {
         width: 100%;
         margin: 0.25rem 0;
-    }
-    .copy-button {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1000;
+        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -156,6 +156,29 @@ def render_visualization(plot_spec: dict):
 def setup_sidebar():
     """Configura a barra lateral"""
     st.sidebar.header("Configurações do Sistema")
+
+    # API Key Inputs
+    st.sidebar.subheader("API Keys")
+    openai_api_key = st.sidebar.text_input(
+        "OpenAI API Key",
+        type="password",
+        placeholder="sk-...",
+        help="Insira sua chave API da OpenAI.",
+        key="openai_api_key_input"
+    )
+    groq_api_key = st.sidebar.text_input(
+        "Groq API Key",
+        type="password",
+        placeholder="gsk_...",
+        help="Insira sua chave API da Groq.",
+        key="groq_api_key_input"
+    )
+
+    # Update environment variables if keys are provided
+    if openai_api_key:
+        os.environ['OPENAI_API_KEY'] = openai_api_key
+    if groq_api_key:
+        os.environ['GROQ_API_KEY'] = groq_api_key
     
     llm_provider = st.sidebar.selectbox(
         "Provedor LLM:",
@@ -205,12 +228,16 @@ def setup_sidebar():
     
     # Status das API Keys
     st.sidebar.subheader("Status das Chaves")
-    issues = Config.validate_keys()
-    if issues:
-        for issue in issues:
-            st.sidebar.error(f"❌ {issue}")
+    # This check is now just for display purposes
+    if not os.environ.get('OPENAI_API_KEY'):
+        st.sidebar.warning("Chave OpenAI não fornecida.")
     else:
-        st.sidebar.success("✅ Chaves configuradas")
+        st.sidebar.success("Chave OpenAI configurada.")
+
+    if not os.environ.get('GROQ_API_KEY'):
+        st.sidebar.warning("Chave Groq não fornecida.")
+    else:
+        st.sidebar.success("Chave Groq configurada.")
     
     return llm_provider, model_name, max_tokens
 
@@ -308,7 +335,9 @@ def load_dataset_section():
 
 def initialize_eda_system(llm_provider: str, model_name: str, max_tokens: int):
     """Inicializa sistema EDA"""
-    current_config = f"{llm_provider}-{model_name}-{max_tokens}"
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    current_config = f"{llm_provider}-{model_name}-{max_tokens}-{openai_key}-{groq_key}"
     
     if (st.session_state.current_config != current_config or 
         not st.session_state.system_initialized):
@@ -740,12 +769,11 @@ def restart_session_to_upload():
 
 def main():
     """Função principal da aplicação"""
-    # Cabeçalho principal
+    # Main header
     st.markdown("""
     <div class="main-header">
-        <h1>EDA Agente Inteligente</h1>
-        <p>Análise Exploratória de Dados CSV com Agentes CrewAI</p>
-        <small>Funciona com qualquer CSV • Localhost & Railway</small>
+        <h1>🔮 EDA Wizard</h1>
+        <p>Your personal AI assistant for Exploratory Data Analysis</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -759,22 +787,6 @@ def main():
     
     # Configurar sidebar
     llm_provider, model_name, max_tokens = setup_sidebar()
-    
-    # Verificar API keys
-    issues = Config.validate_keys()
-    if issues:
-        st.error("API Keys não configuradas!")
-        st.markdown("""
-        **Para usar o sistema:**
-        1. **Edite o arquivo `.env`** na pasta do projeto
-        2. **Adicione suas chaves API:**
-           ```
-           GROQ_API_KEY=gsk_sua_chave_groq_aqui
-           OPENAI_API_KEY=sk_sua_chave_openai_aqui
-           ```
-        3. **Reinicie a aplicação**
-        """)
-        st.stop()
     
     # Inicializar sistema
     system_ready = initialize_eda_system(llm_provider, model_name, max_tokens)
