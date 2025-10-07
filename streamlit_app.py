@@ -3,13 +3,10 @@ import pandas as pd
 import os
 import tempfile
 import json
-import numpy as np
 from datetime import datetime
-from PIL import Image
 import plotly.express as px
-import plotly.graph_objects as go
 from utils.config import Config
-from utils.helpers import ensure_directories, clean_temp_files, validate_csv_file
+from utils.helpers import ensure_directories, clean_temp_files
 from main import EDACrewSystem
 
 # Configuração da página
@@ -80,23 +77,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def initialize_session_state():
-    """Inicializa o estado da sessão"""
-    if 'eda_system' not in st.session_state:
-        st.session_state.eda_system = None
-    if 'dataset_loaded' not in st.session_state:
-        st.session_state.dataset_loaded = False
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
-    if 'current_dataset_info' not in st.session_state:
-        st.session_state.current_dataset_info = {}
-    if 'current_config' not in st.session_state:
-        st.session_state.current_config = ""
-    if 'system_initialized' not in st.session_state:
-        st.session_state.system_initialized = False
-    if 'dataset_source' not in st.session_state:
-        st.session_state.dataset_source = ""
-    if 'session_finalized' not in st.session_state:
-        st.session_state.session_finalized = False
+    """Initializes session state with default values."""
+    defaults = {
+        'eda_system': None,
+        'dataset_loaded': False,
+        'chat_history': [],
+        'current_dataset_info': {},
+        'current_config': "",
+        'system_initialized': False,
+        'dataset_source': "",
+        'session_finalized': False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 def handle_rate_limit_error(error_msg: str, provider: str):
     """Função para tratar rate limits"""
@@ -118,98 +112,46 @@ def handle_rate_limit_error(error_msg: str, provider: str):
     return False
 
 
-# Sidebar geral para qualquer dataset
-def add_visualization_sidebar():
-    """Sidebar com opções gerais de visualização - VERSÃO CORRIGIDA"""
-    if st.session_state.get('dataset_loaded') and st.session_state.get('eda_system'):
+def render_visualization(plot_spec: dict):
+    """Renders a Plotly chart based on a JSON specification."""
+    try:
+        plot_type = plot_spec.get("plot_type")
+        data = pd.DataFrame(plot_spec.get("data", []))
+        params = plot_spec.get("params", {})
         
-        eda_system = st.session_state.eda_system
-        
-        if hasattr(eda_system, 'current_dataset') and eda_system.current_dataset is not None:
-            data = eda_system.current_dataset
-            
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("### 📊 Visualizações Rápidas")
-            
-            # Botão principal para gerar todas as visualizações
-            if st.sidebar.button("🎯 Gerar Todas as Visualizações", key="viz_all_sidebar"):
-                # Simular input do usuário para processar visualizações
-                question = "visualizações completas do dataset"
-                
-                # Processar sem rerun automático
-                process_user_question(question)
-                
-                # Mostrar mensagem de sucesso
-                st.sidebar.success("✅ Visualizações geradas!")
-            
-            # Botões para gráficos específicos
-            st.sidebar.markdown("**Gráficos Específicos:**")
-            
-            if st.sidebar.button("📈 Matriz Correlação", key="viz_corr"):
-                process_user_question("gera matriz de correlação")
-                st.sidebar.success("✅ Matriz gerada!")
-            
-            if st.sidebar.button("📊 Distribuições", key="viz_dist"):
-                process_user_question("mostra distribuições das variáveis")
-                st.sidebar.success("✅ Distribuições geradas!")
-            
-            if st.sidebar.button("🎯 Scatter Plots", key="viz_scatter"):
-                process_user_question("cria scatter plots entre variáveis")
-                st.sidebar.success("✅ Scatter plots gerados!")
-            
-            # Informações do dataset
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("### 📋 Info do Dataset")
-            
-            # Métricas básicas
-            col1, col2 = st.sidebar.columns(2)
-            with col1:
-                st.metric("Linhas", data.shape[0])
-            with col2:
-                st.metric("Colunas", data.shape[1])
-            
-            # Tipos de colunas
-            numeric_cols = data.select_dtypes(include=['number']).columns
-            categorical_cols = data.select_dtypes(include=['object']).columns
-            
-            st.sidebar.markdown(f"**Numéricas:** {len(numeric_cols)}")
-            st.sidebar.markdown(f"**Categóricas:** {len(categorical_cols)}")
-            
-            # Mostrar nomes das colunas principais
-            st.sidebar.markdown("**Principais Colunas:**")
-            
-            if len(data.columns) <= 8:
-                for col in data.columns:
-                    # Encurtar nomes longos
-                    col_display = col if len(col) <= 20 else col[:17] + "..."
-                    st.sidebar.markdown(f"• {col_display}")
-            else:
-                for col in data.columns[:6]:
-                    col_display = col if len(col) <= 20 else col[:17] + "..."
-                    st.sidebar.markdown(f"• {col_display}")
-                st.sidebar.markdown(f"... e mais {len(data.columns)-6}")
-            
-            # Status de qualidade dos dados
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("### ⚡ Qualidade dos Dados")
-            
-            # Verificar valores nulos
-            null_count = data.isnull().sum().sum()
-            if null_count > 0:
-                st.sidebar.warning(f"⚠️ {null_count} valores nulos")
-            else:
-                st.sidebar.success("✅ Sem valores nulos")
-            
-            # Verificar duplicatas
-            dup_count = data.duplicated().sum()
-            if dup_count > 0:
-                st.sidebar.warning(f"⚠️ {dup_count} linhas duplicadas")
-            else:
-                st.sidebar.success("✅ Sem duplicatas")
-            
-            # Tamanho do dataset
-            memory_usage = data.memory_usage(deep=True).sum() / 1024 / 1024  # MB
-            st.sidebar.info(f"💾 Tamanho: {memory_usage:.1f} MB")
+        if data.empty:
+            st.warning("Não há dados para exibir na visualização.")
+            return
+
+        st.markdown("## 📊 Visualização Gerada")
+
+        fig = None
+        if plot_type == 'bar':
+            fig = px.bar(data, **params)
+        elif plot_type == 'heatmap':
+            # For heatmap, the data is the correlation matrix itself.
+            # The JSON should contain the matrix data correctly.
+            fig = px.imshow(data, **params)
+        elif plot_type == 'histogram':
+            fig = px.histogram(data, **params)
+        elif plot_type == 'scatter':
+            fig = px.scatter(data, **params)
+        elif plot_type == 'line':
+            fig = px.line(data, **params)
+        elif plot_type == 'box':
+            fig = px.box(data, **params)
+        elif plot_type == 'pairplot':
+            fig = px.scatter_matrix(data, **params)
+        else:
+            st.error(f"Tipo de gráfico desconhecido: {plot_type}")
+            return
+
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Erro ao renderizar a visualização: {e}")
+        st.json(plot_spec)
 
 def setup_sidebar():
     """Configura a barra lateral"""
@@ -544,6 +486,9 @@ def chat_interface():
                 {chat["response"]}
                 </div>
                 """, unsafe_allow_html=True)
+
+                if 'plot_spec' in chat and chat['plot_spec']:
+                    render_visualization(chat['plot_spec'])
     
     # Nova pergunta
     st.subheader("Faça sua Pergunta")
@@ -637,285 +582,52 @@ def chat_interface():
         finalize_session()
 
 def process_user_question(question: str):
-    """Versão corrigida sem modificação de widget"""
-    
-    # Detectar solicitações de visualização
-    viz_keywords = ['gráfico', 'grafico', 'chart', 'plot', 'visualiza', 
-                   'correlação', 'correlacao', 'distribuição', 'distribuicao', 
-                   'heatmap', 'histograma', 'mostra', 'gera', 'cria', 'ilustra',
-                   'matriz', 'scatter', 'todas as visualizações', 'visualizações completas']
-    
-    is_viz_request = any(keyword in question.lower() for keyword in viz_keywords)
-    
-    # Adicionar pergunta ao histórico ANTES do processamento
+    """Processes a user's question, handling both text and visualization responses."""
     st.session_state.chat_history.append({
         'type': 'user',
         'message': question,
         'timestamp': datetime.now().isoformat()
     })
-    
-    if is_viz_request:
-        # PROCESSAMENTO DE VISUALIZAÇÕES
-        st.markdown("## 📊 GRÁFICOS GERADOS")
-        
+
+    with st.spinner("🤖 Analisando sua pergunta..."):
         try:
-            # Acessar dados diretamente
-            eda_system = st.session_state.eda_system
-            data = eda_system.current_dataset
-            dataset_name = eda_system.dataset_info.get('name', 'Dataset')
+            # The agent's response is now either a text or a JSON spec for a plot
+            result = st.session_state.eda_system.analyze_question(question)
             
-            st.success(f"✅ Gerando gráficos para: {dataset_name}")
-            
-            # Preparar contadores para keys únicos
-            chart_counter = len(st.session_state.chat_history)
-            
-            # Identificar tipos de colunas
-            numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
-            categorical_cols = data.select_dtypes(include=['object']).columns.tolist()
-            
-            charts_generated = []
-            
-            # 1. INFORMAÇÕES GERAIS DO DATASET
-            st.markdown("### 📋 Resumo do Dataset")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Linhas", data.shape[0])
-            with col2:
-                st.metric("Colunas", data.shape[1])
-            with col3:
-                st.metric("Numéricas", len(numeric_cols))
-            with col4:
-                st.metric("Categóricas", len(categorical_cols))
-            
-            # 2. MATRIZ DE CORRELAÇÃO
-            if len(numeric_cols) >= 2:
-                st.markdown("### 🔗 Matriz de Correlação")
-                
-                corr_matrix = data[numeric_cols].corr()
-                fig_corr = px.imshow(
-                    corr_matrix,
-                    text_auto=True,
-                    title="Matriz de Correlação entre Variáveis Numéricas",
-                    color_continuous_scale="RdBu_r",
-                    aspect="auto"
-                )
-                fig_corr.update_layout(width=800, height=600)
-                
-                # USAR CONTAINER ÚNICO PARA EVITAR CONFLITOS
-                st.plotly_chart(fig_corr, use_container_width=True, key=f"corr_matrix_{chart_counter}")
-                charts_generated.append("Matriz de Correlação")
-                
-                # Análise das correlações mais fortes
-                corr_abs = corr_matrix.abs()
-                np.fill_diagonal(corr_abs.values, 0)
-                if not corr_abs.empty and corr_abs.max().max() > 0:
-                    max_corr = corr_abs.max().max()
-                    max_corr_idx = corr_abs.stack().idxmax()
-                    actual_corr = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
-                    st.info(f"Correlação mais forte: {max_corr_idx[0]} ↔ {max_corr_idx[1]} ({actual_corr:.3f})")
-            
-            # 3. DISTRIBUIÇÕES DAS VARIÁVEIS NUMÉRICAS
-            if len(numeric_cols) > 0:
-                st.markdown("### 📊 Distribuições das Variáveis Numéricas")
-                
-                # Mostrar até 4 distribuições em 2 colunas
-                num_plots = min(len(numeric_cols), 4)
-                
-                for i, col in enumerate(numeric_cols[:num_plots]):
-                    st.markdown(f"**Distribuição de {col}:**")
-                    
-                    # Histograma com marginal box plot
-                    fig_hist = px.histogram(
-                        data, 
-                        x=col, 
-                        title=f"Distribuição: {col}",
-                        marginal="box",
-                        nbins=min(30, data[col].nunique()) if data[col].nunique() > 2 else 10
-                    )
-                    
-                    st.plotly_chart(fig_hist, use_container_width=True, key=f"hist_{col}_{chart_counter}")
-                    
-                    # Estatísticas básicas
-                    stats = data[col].describe()
-                    st.caption(f"Média: {stats['mean']:.2f} | Mediana: {stats['50%']:.2f} | Desvio: {stats['std']:.2f}")
-                
-                charts_generated.append(f"Distribuições de {num_plots} variáveis")
-            
-            # 4. RELAÇÕES ENTRE VARIÁVEIS NUMÉRICAS
-            if len(numeric_cols) >= 2:
-                st.markdown("### 🎯 Relações entre Variáveis")
-                
-                # Scatter plot das duas primeiras variáveis
-                x_var = numeric_cols[0]
-                y_var = numeric_cols[1]
-                
-                # Se há variável categórica, usar para colorir
-                if len(categorical_cols) > 0:
-                    color_var = categorical_cols[0]
-                    unique_cats = data[color_var].nunique()
-                    
-                    if unique_cats <= 10:  # Máximo 10 categorias
-                        fig_scatter = px.scatter(
-                            data, 
-                            x=x_var, 
-                            y=y_var, 
-                            color=color_var,
-                            title=f"{x_var} vs {y_var} (por {color_var})"
-                        )
-                    else:
-                        fig_scatter = px.scatter(
-                            data, 
-                            x=x_var, 
-                            y=y_var,
-                            title=f"{x_var} vs {y_var}"
-                        )
-                else:
-                    fig_scatter = px.scatter(
-                        data, 
-                        x=x_var, 
-                        y=y_var,
-                        title=f"{x_var} vs {y_var}"
-                    )
-                
-                st.plotly_chart(fig_scatter, use_container_width=True, key=f"scatter_{chart_counter}")
-                charts_generated.append(f"Scatter plot {x_var} vs {y_var}")
-            
-            # 5. ANÁLISE POR CATEGORIAS (específico para dados como Titanic)
-            if len(categorical_cols) > 0 and len(numeric_cols) > 0:
-                st.markdown("### 📈 Análise por Categorias")
-                
-                # Procurar colunas de sobrevivência e gênero
-                survival_cols = [col for col in categorical_cols if any(word in col.lower() 
-                                for word in ['survived', 'survival', 'outcome'])]
-                gender_cols = [col for col in categorical_cols if any(word in col.lower() 
-                              for word in ['sex', 'gender'])]
-                
-                if survival_cols and gender_cols:
-                    survival_col = survival_cols[0]
-                    gender_col = gender_cols[0]
-                    
-                    st.markdown(f"**Análise de {survival_col} por {gender_col}:**")
-                    
-                    # Gráfico de barras agrupadas
-                    fig_survival = px.histogram(
-                        data,
-                        x=gender_col,
-                        color=survival_col,
-                        title=f"Distribuição de {survival_col} por {gender_col}",
-                        barmode='group'
-                    )
-                    st.plotly_chart(fig_survival, use_container_width=True, key=f"survival_{chart_counter}")
-                    
-                    # Tabela cruzada
-                    cross_tab = pd.crosstab(data[gender_col], data[survival_col], margins=True)
-                    st.dataframe(cross_tab, use_container_width=True)
-                    
-                    charts_generated.append(f"Análise de {survival_col} por {gender_col}")
-                
-                else:
-                    # Análise geral por categorias
-                    cat_var = categorical_cols[0]
-                    num_var = numeric_cols[0]
-                    
-                    unique_cats = data[cat_var].nunique()
-                    if unique_cats <= 15:  # Máximo 15 categorias
-                        
-                        # Box plot
-                        fig_box = px.box(
-                            data, 
-                            x=cat_var, 
-                            y=num_var,
-                            title=f"Distribuição de {num_var} por {cat_var}"
-                        )
-                        st.plotly_chart(fig_box, use_container_width=True, key=f"box_{chart_counter}")
-                        charts_generated.append(f"Box plot {num_var} por {cat_var}")
-            
-            # 6. AMOSTRA DOS DADOS
-            st.markdown("### 🔍 Amostra dos Dados")
-            st.dataframe(data.head(10), use_container_width=True)
-            
-            # 7. ESTATÍSTICAS DESCRITIVAS
-            if len(numeric_cols) > 0:
-                st.markdown("### 📈 Estatísticas Descritivas")
-                desc_stats = data[numeric_cols].describe()
-                st.dataframe(desc_stats, use_container_width=True)
-            
-            # RESPOSTA CONSOLIDADA
-            result = f"""✅ **GRÁFICOS EXIBIDOS COM SUCESSO!**
+            plot_spec = None
+            response_text = result
 
-**Dataset analisado:** {dataset_name}
-• Dimensões: {data.shape[0]} linhas × {data.shape[1]} colunas
-• Variáveis numéricas: {len(numeric_cols)}
-• Variáveis categóricas: {len(categorical_cols)}
-
-**Gráficos gerados:**
-{chr(10).join([f"• {chart}" for chart in charts_generated])}
-
-**Todos os gráficos são interativos** - você pode fazer zoom, filtrar e explorar os dados.
-
-**Os gráficos estão visíveis ACIMA desta mensagem!** Se não consegue ver, role a tela para cima."""
-            
-        except Exception as e:
-            st.error(f"Erro ao gerar gráficos: {str(e)}")
-            result = f"Erro ao gerar visualizações: {str(e)}"
-    
-    else:
-        # PROCESSAMENTO DE PERGUNTAS NORMAIS
-        with st.spinner("🤖 Analisando sua pergunta..."):
             try:
-                # Usar o sistema CrewAI para perguntas normais
-                result = st.session_state.eda_system.analyze_question(question)
-                
-                # Verificar se há erro de rate limit
-                if any(keyword in result.lower() for keyword in 
-                      ['rate limit', 'erro', 'error', 'exception']):
-                    
-                    current_config = st.session_state.get('current_config', '')
-                    if 'groq' in current_config:
-                        if not handle_rate_limit_error(result, 'groq'):
-                            st.error("Erro na análise da pergunta")
-                        return  # Sair sem adicionar ao histórico se há erro
-                    else:
-                        st.error(f"Erro: {result}")
-                        return
-                
-            except Exception as e:
-                error_msg = str(e)
-                current_config = st.session_state.get('current_config', '')
-                
-                if 'groq' in current_config and 'rate' in error_msg.lower():
-                    if not handle_rate_limit_error(error_msg, 'groq'):
-                        st.error(f"Erro técnico: {error_msg}")
-                else:
-                    st.error(f"Erro ao processar pergunta: {error_msg}")
-                return
+                # Try to parse the result as JSON. If it works, it's a plot spec.
+                parsed_json = json.loads(result)
+                if isinstance(parsed_json, dict) and "plot_type" in parsed_json:
+                    plot_spec = parsed_json
+                    # If there's a plot, the response text is a generic confirmation.
+                    response_text = "Aqui está a visualização que você pediu:"
+            except (json.JSONDecodeError, TypeError):
+                # It's not a JSON plot spec, so treat it as a standard text response.
+                response_text = result
+
+            st.session_state.chat_history.append({
+                'type': 'agent',
+                'response': response_text,
+                'plot_spec': plot_spec, # Will be None if it's a text response
+                'timestamp': datetime.now().isoformat()
+            })
+
+        except Exception as e:
+            error_msg = str(e)
+            st.error(f"Ocorreu um erro ao processar sua pergunta: {error_msg}")
+            # Optionally, add error to history for debugging
+            st.session_state.chat_history.append({
+                'type': 'agent',
+                'response': f"Erro: {error_msg}",
+                'plot_spec': None,
+                'timestamp': datetime.now().isoformat()
+            })
     
-    # Adicionar resposta ao histórico
-    st.session_state.chat_history.append({
-        'type': 'agent', 
-        'response': result,
-        'timestamp': datetime.now().isoformat(),
-        'has_visualization': is_viz_request
-    })
-    
-    # MOSTRAR RESPOSTA IMEDIATAMENTE (sem rerun)
-    if is_viz_request:
-        # Para visualizações, a resposta já foi mostrada acima
-        st.markdown("---")
-        st.success("✅ Visualizações geradas com sucesso! Veja os gráficos acima.")
-    else:
-        # Para perguntas normais, mostrar a resposta
-        st.markdown(f"""
-        <div class="agent-response">
-        <strong>🤖 Resposta do Agente:</strong><br>
-        {result}
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # REMOÇÃO DA LINHA PROBLEMÁTICA:
-    # NÃO podemos modificar st.session_state.user_question_input aqui
-    # O Streamlit não permite modificar widgets após instantiação
+    # Rerun to update the UI with the new chat history
+    st.rerun()
 
 
 def get_final_conclusions():
@@ -1047,9 +759,6 @@ def main():
     
     # Configurar sidebar
     llm_provider, model_name, max_tokens = setup_sidebar()
-    
-    # Sidebar de visualizações
-    add_visualization_sidebar()
     
     # Verificar API keys
     issues = Config.validate_keys()

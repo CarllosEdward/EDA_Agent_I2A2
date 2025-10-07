@@ -1,278 +1,107 @@
-from crewai import Agent
-from tools import ChartGeneratorTool, DataAnalyzerTool, MemoryManagerTool
-import streamlit as st  # ADICIONADO: Integração com Streamlit
-import pandas as pd  # ADICIONADO: Para manipulação de dados
+import pandas as pd
+import json
 
-def create_visualization_expert_agent(llm):
-    """Cria o agente especialista em visualização com prompts melhorados."""
-    
-    return Agent(
-        role="Especialista em Visualização de Dados",
-        goal="""
-        Gerar visualizações adequadas e informativas para o usuário.
-        Concentre-se em criar gráficos que comuniquem insights de forma clara.
-        """,
-        backstory="""
-        Você é um tradutor visual de dados. Recebe análises e perguntas e as transforma
-        em gráficos claros e eficazes.
-        
-        Suas responsabilidades são:
-        
-        - **Seleção de Gráfico:** Escolher o tipo de gráfico mais apropriado
-          (e.g., histograma para distribuição, heatmap para correlação).
-        
-        - **Criação e Exibição:** Gerar o gráfico usando as ferramentas disponíveis
-          e garantir que ele seja exibido na tela do Streamlit.
-        
-        - **Resumo Visual:** Resumir os principais insights que o gráfico revela,
-          de forma concisa.
-        
-        A qualidade é sua prioridade. Sempre use as ferramentas fornecidas para
-        criar os gráficos e certifique-se de que a visualização seja informativa
-        e direta.
-        """,
-        tools=[
-            ChartGeneratorTool(),
-            DataAnalyzerTool(),
-            MemoryManagerTool()
-        ],
-        llm=llm,
-        verbose=True,
-        memory=True,
-        allow_delegation=False,
-        max_iter=2,
-        max_execution_time=90,
-        system_message="""
-        Gere gráficos quando solicitado. Seja conciso ao explicar o que a visualização
-        mostra. Use os métodos do ChartGeneratorTool para exibir gráficos na tela e
-        habilitar downloads.
-        """
-    )
-
-# NOVA CLASSE: Wrapper para métodos diretos de visualização
 class VisualizationExpert:
     """
-    Classe wrapper para facilitar chamadas diretas de visualização
+    Gera especificações de visualização em JSON a partir de um DataFrame.
     """
     
     def __init__(self, llm):
-        self.agent = create_visualization_expert_agent(llm)
-        self.chart_tool = ChartGeneratorTool()
-    
-    def create_survival_chart_direct(self, data: pd.DataFrame, user_question: str = "") -> str:
         """
-        Método direto para criar gráfico de sobrevivência
+        Inicializa o especialista em visualização.
+
+        Args:
+            llm: O modelo de linguagem a ser usado (atualmente não utilizado,
+                 mas mantido para futuras integrações).
         """
-        try:
-            st.info("🎨 Gerando gráfico de sobrevivência...")
-            
-            # Verificar se é dataset do Titanic ou similar
-            if 'Sex' in data.columns and 'Survived' in data.columns:
-                # Usar método específico para sobrevivência por gênero
-                result = self.chart_tool.create_survival_by_gender_chart(data)
-                
-                # Análise adicional dos dados
-                total_passengers = len(data)
-                total_survivors = data['Survived'].sum()
-                survival_rate = (total_survivors / total_passengers * 100)
-                
-                analysis = f"""
-                **📊 Análise de Sobrevivência Completa:**
-                
-                • **Total de passageiros**: {total_passengers}
-                • **Total de sobreviventes**: {total_survivors}
-                • **Taxa geral de sobrevivência**: {survival_rate:.1f}%
-                
-                **🔍 Insights por Gênero:**
-                """
-                
-                # Análise por gênero
-                gender_analysis = data.groupby('Sex')['Survived'].agg(['count', 'sum', 'mean'])
-                for gender, stats in gender_analysis.iterrows():
-                    gender_pt = "Mulheres" if gender == "female" else "Homens"
-                    emoji = "👩" if gender == "female" else "👨"
-                    analysis += f"""
-                • {emoji} **{gender_pt}**: {stats['sum']}/{stats['count']} sobreviveram ({stats['mean']*100:.1f}%)"""
-                
-                analysis += f"""
-                
-                **✅ Gráficos gerados acima mostram:**
-                - Comparação de totais por gênero
-                - Distribuição de sobreviventes vs não sobreviventes  
-                - Taxas de sobrevivência percentuais
-                - Resumo estatístico completo
-                
-                {result}
-                """
-                
-                return analysis
-                
-            else:
-                # Dataset sem colunas de sobrevivência padrão
-                st.warning("⚠️ Colunas 'Sex' e 'Survived' não encontradas. Criando análise geral...")
-                
-                # Tentar criar visualização geral
-                if len(data.select_dtypes(include=['number']).columns) > 0:
-                    return self.create_general_visualization(data)
-                else:
-                    return "❌ Dataset não contém dados adequados para visualização de sobrevivência."
-                    
-        except Exception as e:
-            error_msg = f"Erro ao criar gráfico de sobrevivência: {str(e)}"
-            st.error(error_msg)
-            return error_msg
-    
-    def create_correlation_chart_direct(self, data: pd.DataFrame) -> str:
+        self.llm = llm
+
+    def _create_plot_spec(self, plot_type: str, data: pd.DataFrame, params: dict) -> str:
         """
-        Método direto para criar matriz de correlação
+        Cria uma especificação de gráfico em formato JSON.
         """
-        try:
-            st.info("🎨 Gerando matriz de correlação...")
-            
-            # Verificar se há colunas numéricas suficientes
+        spec = {
+            "plot_type": plot_type,
+            "data": data.to_dict(orient='records'),
+            "params": params
+        }
+        return json.dumps(spec)
+
+    def create_survival_chart(self, data: pd.DataFrame, user_question: str = "") -> str:
+        """
+        Gera uma especificação para um gráfico de sobrevivência.
+        """
+        if 'Sex' in data.columns and 'Survived' in data.columns:
+            # Especificação para um gráfico de barras de sobrevivência por gênero
+            return self._create_plot_spec(
+                plot_type='bar',
+                data=data,
+                params={
+                    "x": "Sex",
+                    "y": "Survived",
+                    "color": "Survived",
+                    "title": "Taxa de Sobrevivência por Gênero",
+                    "barmode": "group"
+                }
+            )
+        else:
+            return self.create_general_visualization(data)
+
+    def create_correlation_chart(self, data: pd.DataFrame) -> str:
+        """
+        Gera uma especificação para uma matriz de correlação (heatmap).
+        """
+        numeric_cols = data.select_dtypes(include=['number']).columns
+        if len(numeric_cols) < 2:
+            return json.dumps({"error": "Dataset possui menos de 2 colunas numéricas."})
+
+        corr_matrix = data[numeric_cols].corr().to_dict()
+
+        return self._create_plot_spec(
+            plot_type='heatmap',
+            data=pd.DataFrame(corr_matrix), # O heatmap espera um DataFrame
+            params={
+                "title": "Matriz de Correlação",
+                "text_auto": True
+            }
+        )
+
+    def create_distribution_chart(self, data: pd.DataFrame, column: str = None) -> str:
+        """
+        Gera uma especificação para um histograma de distribuição.
+        """
+        if column is None:
             numeric_cols = data.select_dtypes(include=['number']).columns
-            if len(numeric_cols) < 2:
-                msg = "⚠️ Dataset possui menos de 2 colunas numéricas para análise de correlação."
-                st.warning(msg)
-                return msg
-            
-            result = self.chart_tool.create_correlation_heatmap(data)
-            
-            # Análise das correlações
-            corr_matrix = data[numeric_cols].corr()
-            
-            # Encontrar correlações mais fortes (excluindo diagonal)
-            import numpy as np
-            corr_abs = corr_matrix.abs()
-            np.fill_diagonal(corr_abs.values, 0)
-            
-            if not corr_abs.empty and corr_abs.max().max() > 0:
-                max_corr = corr_abs.max().max()
-                max_corr_idx = corr_abs.stack().idxmax()
-                actual_corr = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
-                
-                analysis = f"""
-                **📊 Análise de Correlação:**
-                
-                • **Colunas analisadas**: {len(numeric_cols)} variáveis numéricas
-                • **Correlação mais forte**: {max_corr_idx[0]} ↔ {max_corr_idx[1]} ({actual_corr:.3f})
-                
-                **🔍 Interpretação:**
-                • Valores próximos de +1: Correlação positiva forte
-                • Valores próximos de -1: Correlação negativa forte
-                • Valores próximos de 0: Pouca ou nenhuma correlação
-                
-                **✅ O heatmap acima mostra todas as correlações entre as variáveis numéricas.**
-                
-                {result}
-                """
+            if len(numeric_cols) > 0:
+                column = numeric_cols[0]
             else:
-                analysis = f"""
-                **📊 Matriz de Correlação Gerada:**
-                
-                • **Colunas analisadas**: {len(numeric_cols)} variáveis numéricas
-                • **Correlações**: Visualizadas no heatmap acima
-                
-                {result}
-                """
-            
-            return analysis
-            
-        except Exception as e:
-            error_msg = f"Erro ao criar matriz de correlação: {str(e)}"
-            st.error(error_msg)
-            return error_msg
-    
-    def create_distribution_chart_direct(self, data: pd.DataFrame, column: str = None) -> str:
-        """
-        Método direto para criar gráfico de distribuição
-        """
-        try:
-            # Selecionar coluna se não especificada
-            if column is None:
-                numeric_cols = data.select_dtypes(include=['number']).columns
-                if len(numeric_cols) > 0:
-                    column = numeric_cols[0]
-                else:
-                    msg = "❌ Nenhuma coluna numérica encontrada para análise de distribuição."
-                    st.warning(msg)
-                    return msg
-            
-            if column not in data.columns:
-                msg = f"❌ Coluna '{column}' não encontrada no dataset."
-                st.error(msg)
-                return msg
-            
-            st.info(f"🎨 Gerando gráfico de distribuição para '{column}'...")
-            
-            result = self.chart_tool.create_histogram(data, column)
-            
-            # Análise estatística da distribuição
-            stats = data[column].describe()
-            null_count = data[column].isnull().sum()
-            
-            analysis = f"""
-            **📊 Análise de Distribuição - {column}:**
-            
-            **📈 Estatísticas Descritivas:**
-            • Média: {stats['mean']:.2f}
-            • Mediana (50%): {stats['50%']:.2f}
-            • Desvio Padrão: {stats['std']:.2f}
-            • Mínimo: {stats['min']:.2f}
-            • Máximo: {stats['max']:.2f}
-            • 1º Quartil (25%): {stats['25%']:.2f}
-            • 3º Quartil (75%): {stats['75%']:.2f}
-            • Valores ausentes: {null_count}
-            
-            **✅ O histograma acima mostra a distribuição da variável {column}.**
-            
-            {result}
-            """
-            
-            return analysis
-            
-        except Exception as e:
-            error_msg = f"Erro ao criar gráfico de distribuição: {str(e)}"
-            st.error(error_msg)
-            return error_msg
-    
+                return json.dumps({"error": "Nenhuma coluna numérica encontrada."})
+
+        if column not in data.columns:
+            return json.dumps({"error": f"Coluna '{column}' não encontrada."})
+
+        return self._create_plot_spec(
+            plot_type='histogram',
+            data=data[[column]],
+            params={
+                "x": column,
+                "title": f"Distribuição de {column}",
+                "marginal": "box"
+            }
+        )
+
     def create_general_visualization(self, data: pd.DataFrame) -> str:
         """
-        Cria visualização geral baseada na estrutura do dataset
+        Gera uma especificação para uma visualização geral (ex: pairplot).
         """
-        try:
-            st.info("🎨 Gerando visualizações gerais do dataset...")
-            
-            results = []
-            
-            # 1. Se há colunas numéricas, criar correlação
-            numeric_cols = data.select_dtypes(include=['number']).columns
-            if len(numeric_cols) >= 2:
-                corr_result = self.create_correlation_chart_direct(data)
-                results.append("🔗 **Matriz de Correlação gerada**")
-            
-            # 2. Distribuição da primeira coluna numérica
-            if len(numeric_cols) > 0:
-                first_numeric = numeric_cols[0]
-                dist_result = self.create_distribution_chart_direct(data, first_numeric)
-                results.append(f"📊 **Distribuição de {first_numeric} gerada**")
-            
-            # 3. Informações gerais
-            general_info = f"""
-            **📋 Informações Gerais do Dataset:**
-            
-            • **Dimensões**: {data.shape[0]} linhas × {data.shape[1]} colunas
-            • **Colunas numéricas**: {len(numeric_cols)}
-            • **Colunas categóricas**: {len(data.select_dtypes(include=['object']).columns)}
-            • **Valores ausentes**: {data.isnull().sum().sum()}
-            
-            **✅ Visualizações geradas:**
-            {chr(10).join(results)}
-            """
-            
-            return general_info
-            
-        except Exception as e:
-            error_msg = f"Erro ao criar visualização geral: {str(e)}"
-            st.error(error_msg)
-            return error_msg
+        numeric_cols = data.select_dtypes(include=['number']).columns
+        if len(numeric_cols) < 2:
+            return json.dumps({"error": "Visualização geral requer pelo menos 2 colunas numéricas."})
+
+        return self._create_plot_spec(
+            plot_type='pairplot',
+            data=data,
+            params={
+                "title": "Visualização Geral das Relações entre Variáveis"
+            }
+        )
