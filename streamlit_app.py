@@ -727,8 +727,12 @@ def process_user_question(question: str):
         st.markdown("## GRAFICOS GERADOS")
         
         try:
-            # Acessar dados diretamente
-            eda_system = st.session_state.eda_system
+            # Acessar dados diretamente (com validação)
+            eda_system = st.session_state.get('eda_system')
+            # Verificar se o sistema/ dataset foram inicializados
+            if eda_system is None or getattr(eda_system, 'current_dataset', None) is None:
+                raise ValueError("Nenhum dataset carregado. Faça upload de um arquivo CSV primeiro.")
+
             data = eda_system.current_dataset
             dataset_name = eda_system.dataset_info.get('name', 'Dataset')
             
